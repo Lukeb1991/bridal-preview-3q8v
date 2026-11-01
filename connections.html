@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Deema’s Games">
-<title>Connections — Deema’s Bridal Shower</title>
+<title>The Perfect Match — Deema’s Bridal Shower</title>
 <link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="theme.css">
@@ -25,11 +25,11 @@
 <div class="wrap">
 
   <div class="game-header">
-    <a class="back-link" href="index.html">&larr; <span data-cfg="site.backLabel">Games</span></a>
-    <h1 class="game-title" data-cfg="games.connections.title">Connections</h1>
-    <span class="header-spacer back-link" aria-hidden="true">&larr; <span data-cfg="site.backLabel">Games</span></span>
+    <a class="back-link" href="index.html" aria-label="Back to games"><span class="arrow">&larr;</span><span class="back-label" data-cfg="site.backLabel">Games</span></a>
+    <h1 class="game-title" data-cfg="games.connections.title">The Perfect Match</h1>
+    <span class="header-spacer back-link" aria-hidden="true"><span class="arrow">&larr;</span><span class="back-label" data-cfg="site.backLabel">Games</span></span>
   </div>
-  <p class="game-sub" data-cfg="games.connections.sub">Sixteen words. Four secrets.</p>
+  <p class="game-sub" data-cfg="games.connections.sub">16 words, can you tie the knots?</p>
   <p class="conn-instructions">Pick four items that share a connection.</p>
 
   <div id="solvedGroups"></div>
@@ -37,10 +37,15 @@
 
   <div class="mistakes" id="mistakes"></div>
 
-  <div class="conn-controls">
+  <div class="conn-controls" id="playControls">
     <button class="pill-btn ghost" id="shuffleBtn">Shuffle</button>
     <button class="pill-btn ghost" id="deselectBtn">Deselect all</button>
     <button class="pill-btn" id="submitBtn">Submit</button>
+  </div>
+  <!-- shown once the game is over, so the results can be reopened after the pop-up is closed -->
+  <div class="conn-controls is-hidden" id="endControls">
+    <button class="pill-btn ghost" id="resultsBtn">See results</button>
+    <button class="pill-btn" id="againBtn">&#8635; Play again</button>
   </div>
 
 </div>
@@ -96,6 +101,10 @@ let solved = [];
 let mistakesUsed = 0;
 let locked = false;
 let guessLog = [];
+let guessedSigs = new Set();   // every 4-word combination already submitted
+let ended = false;
+let lastWon = false;
+let gen = 0;                   // bumps on restart so a pending pop-up from the old game is cancelled
 
 const grid = document.getElementById('grid');
 const solvedGroupsEl = document.getElementById('solvedGroups');
@@ -148,11 +157,16 @@ function render(){
   });
   fitCells();
 
-  solvedGroupsEl.innerHTML = '';
+  // Solved rows are only ADDED, never rebuilt, so rows already on screen
+  // don't replay their reveal animation every time a tile is tapped.
+  const shown = new Set([...solvedGroupsEl.children].map(el => el.dataset.key));
+  if([...shown].some(k => !solved.includes(k))){ solvedGroupsEl.innerHTML = ''; shown.clear(); }   // new game
   solved.forEach(catKey=>{
+    if(shown.has(catKey)) return;
     const cat = CATEGORIES.find(c=>c.key===catKey);
     const div = document.createElement('div');
-    div.className = 'solved-group ' + catKey;
+    div.className = 'solved-group new ' + catKey;
+    div.dataset.key = catKey;
     div.innerHTML = `<div class="g-title"></div><div class="g-items"></div>`;
     div.querySelector('.g-title').textContent = cat.name;
     div.querySelector('.g-items').textContent = cat.words.join(' · ');
@@ -166,6 +180,9 @@ function render(){
 
   submitBtn.disabled = selected.length !== 4;
   if(solved.length === CATEGORIES.length) submitBtn.disabled = true;
+
+  document.getElementById('playControls').classList.toggle('is-hidden', ended);
+  document.getElementById('endControls').classList.toggle('is-hidden', !ended);
 }
 
 function toggleSelect(word){
@@ -180,8 +197,52 @@ function toggleSelect(word){
   render();
 }
 
+// How long the finished board stays visible before the share pop-up opens.
+const FINISH_PAUSE = 2300;
+
+function finishWin(){
+  const myGen = gen;
+  locked = true; ended = true; lastWon = true;
+  render();
+  setTimeout(()=>{ if(myGen === gen) launchConfettiBurst(); }, 450);
+  setTimeout(()=>{ if(myGen === gen) openModal(true); }, FINISH_PAUSE);
+}
+
+// Out of mistakes: reveal the remaining groups one at a time, then pause before the pop-up.
+function finishLose(){
+  const myGen = gen;
+  locked = true; selected = [];
+  const left = CATEGORIES.filter(c => !solved.includes(c.key));
+  const STEP = 1000, FIRST = 600;
+  render();
+  left.forEach((c, i)=>{
+    setTimeout(()=>{
+      if(myGen !== gen) return;
+      solved.push(c.key);
+      haptic(10);
+      render();
+    }, FIRST + i * STEP);
+  });
+  const lastAt = FIRST + (left.length - 1) * STEP;
+  setTimeout(()=>{ if(myGen === gen){ ended = true; lastWon = false; render(); } }, lastAt + 300);
+  setTimeout(()=>{ if(myGen === gen) openModal(false); }, lastAt + FINISH_PAUSE);
+}
+
 function submitGuess(){
   if(selected.length !== 4 || locked) return;
+
+  // the same four words can't be tried twice (and it doesn't cost a mistake)
+  const sig = [...selected].sort().join('|');
+  if(guessedSigs.has(sig)){
+    document.querySelectorAll('.conn-cell.selected').forEach(el=>{
+      el.classList.add('shake');
+      setTimeout(()=>el.classList.remove('shake'), 420);
+    });
+    showToast('Already guessed');
+    haptic(15);
+    return;
+  }
+  guessedSigs.add(sig);
   locked = true;
 
   const cats = selected.map(w => allWords.find(a=>a.word===w).cat);
@@ -195,9 +256,7 @@ function submitGuess(){
     locked = false;
     render();
 
-    if(solved.length === CATEGORIES.length){
-      setTimeout(()=>{ launchConfettiBurst(); openModal(true); }, 500);
-    }
+    if(solved.length === CATEGORIES.length) finishWin();
   } else {
     const counts = {};
     cats.forEach(c => counts[c] = (counts[c]||0) + 1);
@@ -210,14 +269,11 @@ function submitGuess(){
     setTimeout(()=>{
       document.querySelectorAll('.conn-cell.selected').forEach(el=>el.classList.remove('shake'));
       if(maxCount === 3) showToast('One away…');
-      locked = false;
 
       if(mistakesUsed >= MAX_MISTAKES){
-        CATEGORIES.forEach(c=>{ if(!solved.includes(c.key)) solved.push(c.key); });
-        selected = [];
-        render();
-        setTimeout(()=> openModal(false), 400);
+        finishLose();            // stays locked while the answers are revealed
       } else {
+        locked = false;
         render();
       }
     }, 420);
@@ -261,12 +317,17 @@ function openModal(won){
 }
 function closeModal(){ modalOverlay.classList.remove('show'); }
 
-document.getElementById('playAgainBtn').addEventListener('click', ()=>{
+function restart(){
+  gen++;
   closeModal();
   selected = []; solved = []; mistakesUsed = 0; guessLog = []; locked = false;
+  guessedSigs = new Set(); ended = false; lastWon = false;
   order = shuffle(allWords);
   render();
-});
+}
+document.getElementById('playAgainBtn').addEventListener('click', restart);
+document.getElementById('againBtn').addEventListener('click', restart);
+document.getElementById('resultsBtn').addEventListener('click', ()=> openModal(lastWon));
 modalOverlay.addEventListener('click', (e)=>{ if(e.target === modalOverlay) closeModal(); });
 
 function shareText(){ return `${SHARE_LINE}\n\n${buildEmojiGrid()}`; }

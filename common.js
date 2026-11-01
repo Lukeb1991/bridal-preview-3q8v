@@ -20,6 +20,21 @@
     bar.className = 'preview-bar';
     bar.textContent = 'Preview \u00B7 not the final version';
     document.body.appendChild(bar);
-    document.title = 'Preview \u2014 ' + document.title;
+    if(!/^preview/i.test(document.title)) document.title = 'Preview \u2014 ' + document.title;
   }
+
+  // Long game names: shrink the title a touch until it fits on one line.
+  function fitTitle(){
+    var t = document.querySelector('.game-title');
+    if(!t) return;
+    t.style.removeProperty('font-size');
+    var size = parseFloat(getComputedStyle(t).fontSize);
+    while(t.scrollWidth > t.clientWidth + 0.5 && size > 11){
+      size -= 0.5;
+      t.style.setProperty('font-size', size + 'px', 'important');
+    }
+  }
+  fitTitle();
+  window.addEventListener('resize', fitTitle);
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(fitTitle);
 })();

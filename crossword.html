@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Deema’s Games">
-<title>The Mini — Deema’s Bridal Shower</title>
+<title>Deema’s Crossword — Deema’s Bridal Shower</title>
 <link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="theme.css">
@@ -25,11 +25,11 @@
 <div class="wrap xw-wrap">
 
   <div class="game-header">
-    <a class="back-link" href="index.html">&larr; <span data-cfg="site.backLabel">Games</span></a>
-    <h1 class="game-title" data-cfg="games.mini.title">The Mini</h1>
-    <span class="header-spacer back-link" aria-hidden="true">&larr; <span data-cfg="site.backLabel">Games</span></span>
+    <a class="back-link" href="index.html" aria-label="Back to games"><span class="arrow">&larr;</span><span class="back-label" data-cfg="site.backLabel">Games</span></a>
+    <h1 class="game-title" data-cfg="games.mini.title">Deema’s Crossword</h1>
+    <span class="xw-timer" id="timer" role="timer" aria-label="Time taken">0:00</span>
   </div>
-  <p class="game-sub" data-cfg="games.mini.sub">A little crossword, all about Deema.</p>
+  <p class="game-sub" data-cfg="games.mini.sub">It’s all about the Bride</p>
 
   <div class="xw-board" id="board"></div>
 
@@ -62,7 +62,17 @@
     </div>
     <h2 id="winTitle"></h2>
     <p id="winSub"></p>
-    <button class="play-again-btn" id="modalCloseBtn">Lovely</button>
+    <p class="share-line share-head" id="shareLine"></p>
+    <p class="share-line share-close" id="shareClose"></p>
+    <div class="share-row" id="shareRow">
+      <button class="share-btn whatsapp" id="shareWhatsapp">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.87 9.87 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.91C21.96 6.45 17.5 2 12.04 2Z"/></svg>
+        Share on WhatsApp
+      </button>
+      <button class="share-btn native" id="shareNative">&#128241; Share</button>
+      <button class="share-btn copy" id="shareCopy">Copy message</button>
+    </div>
+    <button class="play-again-btn" id="playAgainBtn">&#8635; Play again</button>
   </div>
 </div>
 
@@ -112,11 +122,46 @@ for(let r=0;r<R;r++){
 // navigation order: by number, across before down
 const navOrder = [...entries].sort((a,b)=> a.num - b.num || (a.dir==='A'?-1:1));
 
+// the correct letter for every square (used by Check)
+const solution = {};
+entries.forEach(e => e.cells.forEach(([r,c], i)=>{ if(e.answer) solution[`${r},${c}`] = e.answer[i]; }));
+
 // ---- state ----
 const letters = {};
+const wrong = {};       // squares Check has crossed out; cleared when the square is edited
 let currentEntry = navOrder[0];
 let currentPos = currentEntry.cells[0];
 let finished = false;   // true once solved or revealed (stops repeat wins)
+let won = false;        // solved by the player (not revealed)
+let revealed = false;
+let gen = 0;            // bumps on Clear so a pending win pop-up can be cancelled
+
+// ---- timer: starts with the first letter, stops when solved or revealed ----
+const timerEl = document.getElementById('timer');
+let timerStart = null, timerId = null, elapsed = 0;
+function fmt(s){ return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0'); }
+function tick(){
+  elapsed = Math.floor((Date.now() - timerStart) / 1000);
+  timerEl.textContent = fmt(elapsed);
+}
+function startTimer(){
+  if(timerStart !== null || finished) return;
+  timerStart = Date.now();
+  timerEl.classList.add('running');
+  tick();
+  timerId = setInterval(tick, 250);
+}
+function stopTimer(){
+  if(timerId){ clearInterval(timerId); timerId = null; }
+  if(timerStart !== null) tick();
+  timerEl.classList.remove('running');
+}
+function resetTimer(){
+  stopTimer();
+  timerStart = null; elapsed = 0;
+  timerEl.textContent = '0:00';
+  timerEl.classList.remove('done');
+}
 
 function entriesAt(r,c){
   return entries.filter(e => e.cells.some(([er,ec]) => er===r && ec===c));
@@ -183,8 +228,9 @@ function renderState(){
 }
 
 function renderLetters(){
-  Object.entries(cellEls).forEach(([key, {letterSpan}])=>{
+  Object.entries(cellEls).forEach(([key, {cell, letterSpan}])=>{
     letterSpan.textContent = letters[key] || '';
+    cell.classList.toggle('wrong', !!wrong[key] && !!letters[key]);   // red line through a letter Check found wrong
   });
 }
 
@@ -199,7 +245,9 @@ function moveWithinEntry(delta){
 
 function typeLetter(ch){
   const key = keyOf(currentPos[0], currentPos[1]);
+  startTimer();
   letters[key] = ch;
+  delete wrong[key];
   renderLetters();
   haptic(6);
   moveWithinEntry(1);
@@ -210,11 +258,14 @@ function deleteLetter(){
   const key = keyOf(currentPos[0], currentPos[1]);
   if(letters[key]){
     letters[key] = '';
+    delete wrong[key];
     renderLetters();
     haptic(8);
   } else {
     moveWithinEntry(-1);
-    letters[keyOf(currentPos[0], currentPos[1])] = '';
+    const k2 = keyOf(currentPos[0], currentPos[1]);
+    letters[k2] = '';
+    delete wrong[k2];
     renderLetters();
     haptic(8);
   }
@@ -245,6 +296,7 @@ KEY_ROWS.forEach(row=>{
     btn.textContent = k === 'DEL' ? 'Del' : k;
     btn.addEventListener('click', ()=>{
       if(k === 'DEL'){ deleteLetter(); } else { typeLetter(k); }
+      btn.blur();
     });
     rowEl.appendChild(btn);
   });
@@ -271,10 +323,39 @@ function showToast(msg){
 }
 
 const modalOverlay = document.getElementById('modalOverlay');
+const winSub = document.getElementById('winSub');
+const shareLine = document.getElementById('shareLine');
+const shareClose = document.getElementById('shareClose');
 document.getElementById('winTitle').textContent = CFG.winTitle;
-document.getElementById('winSub').textContent = CFG.winSub;
-document.getElementById('modalCloseBtn').addEventListener('click', ()=> modalOverlay.classList.remove('show'));
 modalOverlay.addEventListener('click', (e)=>{ if(e.target === modalOverlay) modalOverlay.classList.remove('show'); });
+
+// e.g. "Deema’s Bridal Crossword 1:23 ⏱️"
+function resultLine(){ return `${CFG.shareTitle} ${fmt(elapsed)} ${CFG.shareEmoji}`; }
+function shareText(){ return `${resultLine()}\n${CFG.shareLine}`; }
+
+function openShare(){
+  winSub.textContent = CFG.winSub.replace('{time}', fmt(elapsed));
+  shareLine.textContent = resultLine();
+  shareClose.textContent = CFG.shareLine;
+  modalOverlay.classList.add('show');
+}
+
+document.getElementById('shareWhatsapp').addEventListener('click', ()=>{
+  window.open('https://wa.me/?text=' + encodeURIComponent(shareText()), '_blank');
+});
+document.getElementById('shareNative').addEventListener('click', async ()=>{
+  if(navigator.share){
+    try{ await navigator.share({ text: shareText() }); } catch(e){ /* cancelled */ }
+  } else { copyToClipboard(); }
+});
+document.getElementById('shareCopy').addEventListener('click', copyToClipboard);
+function copyToClipboard(){
+  navigator.clipboard.writeText(shareText()).then(()=>{
+    showToast('Copied — paste it anywhere!');
+  }).catch(()=>{
+    showToast('Could not copy — try Share instead');
+  });
+}
 
 function gridState(){
   let allFilled = true, allCorrect = true;
@@ -291,10 +372,14 @@ function gridState(){
 }
 
 function win(){
-  finished = true;
+  const myGen = gen;
+  finished = true; won = true;
+  stopTimer();                               // the clock stops on the last letter
+  timerEl.classList.add('done');
   haptic([15,40,15,40,25]);
   launchConfettiBurst();
-  modalOverlay.classList.add('show');
+  // short pause so the finished grid is seen before the pop-up covers it
+  setTimeout(()=>{ if(myGen === gen) openShare(); }, 1100);
 }
 
 // Fires as you type: the moment the grid is full AND right, you win.
@@ -304,31 +389,59 @@ function maybeAutoCheck(){
   if(s.allFilled && s.allCorrect) win();
 }
 
+// CHECK works at any point: every letter typed so far is compared with the answer,
+// and wrong ones get a red line through them (until you change that square).
 document.getElementById('checkBtn').addEventListener('click', ()=>{
+  if(won){ openShare(); return; }            // already solved: reopen the result
+  if(revealed){ showToast('Answers are showing — tap Clear to start again'); return; }
+
+  Object.keys(wrong).forEach(k => delete wrong[k]);
+  let filled = 0, bad = 0;
+  Object.keys(cellEls).forEach(key=>{
+    const ch = letters[key];
+    if(!ch) return;
+    filled++;
+    if(solution[key] && ch !== solution[key]){ wrong[key] = true; bad++; }
+  });
+  renderLetters();
+
+  if(!filled){ showToast('Type a few letters, then tap Check'); return; }
+  if(bad){
+    haptic([10,30,10]);
+    showToast(bad === 1 ? '1 letter is wrong — crossed out in red' : `${bad} letters are wrong — crossed out in red`);
+    return;
+  }
   const s = gridState();
-  if(!s.allFilled){ showToast('Keep going — a few squares left'); return; }
-  if(s.allCorrect){ if(!finished) win(); else modalOverlay.classList.add('show'); }
-  else { showToast('Close, but a few letters are off'); }
+  if(s.allFilled && s.allCorrect){ win(); return; }   // normally already caught as you type
+  showToast('All correct so far — keep going');
 });
 
 document.getElementById('revealBtn').addEventListener('click', ()=>{
   entries.forEach(e=>{
     e.cells.forEach(([r,c], i)=>{ if(e.answer) letters[keyOf(r,c)] = e.answer[i]; });
   });
-  finished = true;      // revealed answers don't count as a win
+  Object.keys(wrong).forEach(k => delete wrong[k]);
+  finished = true; revealed = true;           // revealed answers don't count as a win
+  stopTimer();
   renderLetters();
   showToast('Answers revealed');
 });
 
-document.getElementById('clearBtn').addEventListener('click', ()=>{
+function resetPuzzle(){
+  gen++;                                      // cancels a win pop-up that hasn't opened yet
+  if(document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+  modalOverlay.classList.remove('show');
   Object.keys(letters).forEach(k=> letters[k] = '');
-  finished = false;
-  currentEntry = navOrder[0];          // back to the first square
+  Object.keys(wrong).forEach(k => delete wrong[k]);
+  finished = won = revealed = false;
+  resetTimer();
+  currentEntry = navOrder[0];                 // back to the first square
   currentPos = currentEntry.cells[0];
   renderLetters();
   renderState();
-  showToast('Cleared');
-});
+}
+document.getElementById('clearBtn').addEventListener('click', ()=>{ resetPuzzle(); showToast('Cleared'); });
+document.getElementById('playAgainBtn').addEventListener('click', resetPuzzle);
 
 renderState();
 renderLetters();

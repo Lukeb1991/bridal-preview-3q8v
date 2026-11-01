@@ -213,8 +213,11 @@ footer.foot{
 
 /* ---------- game chrome (shared by game pages) ---------- */
 .game-header{
+  /* equal-width side slots keep the title truly centred whatever is in them
+     (back button on the left; timer or an invisible spacer on the right) */
+  --hdr-side:92px;
   display:grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: var(--hdr-side) minmax(0,1fr) var(--hdr-side);
   align-items:center;
   gap:10px;
   margin-bottom:8px;
@@ -240,13 +243,40 @@ footer.foot{
 .header-spacer{ grid-column:3; visibility:hidden; pointer-events:none; }
 
 .game-title{
+  grid-column:2;
+  min-width:0;
+  white-space:nowrap;       /* common.js shrinks the font a little if a long name wouldn't fit */
+  overflow:hidden;
   font-family:var(--font-heading);
   font-style:italic;
   font-weight:600;
   font-size:28px;
   text-align:center;
   margin:0;
+  padding:2px 0;
 }
+
+/* timer chip (crossword) sits in the right-hand header slot */
+.xw-timer{
+  grid-column:3;
+  justify-self:end;
+  min-width:56px;
+  text-align:center;
+  font-family:var(--font-body);
+  font-variant-numeric:tabular-nums;
+  font-size:13px;
+  font-weight:600;
+  letter-spacing:0.04em;
+  color:var(--ink-soft);
+  border:1px solid var(--rule);
+  background:var(--paper);
+  border-radius:20px;
+  padding:7px 11px;
+}
+.xw-timer.running{ color:var(--ink); }
+.xw-timer.done{ color:var(--rose-deep); border-color:var(--rose); }
+
+.is-hidden{ display:none !important; }
 .game-sub{ text-align:center; color:var(--ink-soft); font-size:13px; margin:6px 0 28px; }
 
 .pill-btn{
@@ -390,8 +420,10 @@ footer.foot{
   border-radius:8px;
   padding:14px 16px;
   text-align:center;
-  animation:reveal .3s ease;
 }
+/* only a row that has JUST been solved animates in (the class stays, but the
+   element isn't rebuilt, so it doesn't replay when other tiles are tapped) */
+.solved-group.new{ animation:reveal .45s ease; }
 @keyframes reveal{ from{ opacity:0; transform:translateY(-6px);} to{ opacity:1; transform:translateY(0);} }
 .solved-group.y{ background:var(--cat-yellow-bg); color:var(--cat-yellow); }
 .solved-group.g{ background:var(--cat-green-bg);  color:var(--cat-green); }
@@ -534,10 +566,11 @@ footer.foot{
   display:flex; align-items:center; justify-content:center;
   z-index:60;
   opacity:0; pointer-events:none;
-  transition:opacity .25s ease;
+  visibility:hidden;                 /* hidden buttons must not keep keyboard focus */
+  transition:opacity .25s ease, visibility 0s linear .25s;
   padding:20px;
 }
-.modal-overlay.show{ opacity:1; pointer-events:auto; }
+.modal-overlay.show{ opacity:1; pointer-events:auto; visibility:visible; transition-delay:0s; }
 
 .win-modal{
   background:var(--paper);
@@ -634,9 +667,13 @@ footer.foot{
 @media (max-width:480px){
   .wrap{ padding:20px 14px 28px; }
   .game-header{ margin-bottom:2px; }
+  .game-header{ --hdr-side:44px; gap:6px; }
   .game-title{ font-size:23px; }
   .game-sub{ margin:4px 0 16px; font-size:12px; }
-  .back-link{ padding:6px 10px; font-size:12px; }
+  /* phones: back button is just an arrow so the longer game names fit on one line */
+  .back-link{ width:30px; height:30px; padding:0; justify-content:center; gap:0; font-size:14px; }
+  .back-link .back-label{ display:none; }
+  .xw-timer{ min-width:0; width:44px; height:30px; padding:0; display:flex; align-items:center; justify-content:center; font-size:12px; letter-spacing:0.02em; }
 
   .wordle-board{ gap:5px; margin:0 auto 16px; max-width:280px; }
   .wordle-cell{ font-size:21px; border-width:1.5px; }
@@ -689,8 +726,7 @@ button, .conn-cell, .xw-cell{ touch-action:manipulation; -webkit-tap-highlight-c
 }
 /* very narrow phones (iPhone 5/SE 1st gen): keep the header on one line */
 @media (max-width:340px){
-  .game-title{ font-size:14px !important; letter-spacing:0.02em !important; }
-  .back-link{ padding:5px 8px; font-size:11.5px; }
+  .game-title{ letter-spacing:0.02em !important; }
   .conn-grid{ gap:4px; }
 }
 

@@ -19,25 +19,35 @@ window.GAME_CONFIG = {
     footer:         "made with love for Deema"
   },
 
+  /* title = game name · sub = tagline · tag = small description line on the home tile */
   games: {
-    wordle:      { title: "Wordle",      sub: "Six tries to say “I do.”",           tag: "5 letters" },
-    connections: { title: "Connections", sub: "Sixteen words. Four secrets.",       tag: "4 groups"  },
-    mini:        { title: "The Mini",    tileTitle: "Mini",
-                   sub: "A little crossword, all about Deema.",                      tag: "5 × 5"     }
+    wordle:      { title: "Love Letters",      sub: "Six tries to say “I do.”",
+                   tag: "A Wordle Inspired Game" },
+    connections: { title: "The Perfect Match", sub: "16 words, can you tie the knots?",
+                   tag: "A Connections Inspired Game" },
+    mini:        { title: "Deema’s Crossword", tileTitle: "Deema’s Crossword",
+                   sub: "It’s all about the Bride",
+                   tag: "A mini crossword celebrating Deema" }
   },
 
-  /* ---------- WORDLE ----------
-     First game is always firstWord. "New word" then draws at random
-     from altWords. All words must be exactly 5 letters. */
+  /* ---------- LOVE LETTERS (Wordle-style) ----------
+     First game is always firstWord. "New word" then draws from altWords
+     (shuffled, so every word comes up before any repeats).
+     All words must be exactly 5 letters. Guesses must be real English words;
+     the answers below are always accepted as guesses too. */
   wordle: {
     firstWord: "VOWED",
-    altWords:  ["SUSHI","BRIDE","ROSES","RAVEN","TOAST","WALTZ","CRYPT","ANGST","TIARA","GUEST"],
-    shareLine: "I said ‘I do’ at Deema’s Bridal Shower and all I got was this lousy Wordle",
+    altWords:  ["DEEMA","BRIDE","GROOM","ALTAR","AISLE","TOAST","DANCE","HEART","PEARL","TULLE",
+                "SUSHI","CHORD","RIFFS","RAVEN","ROSES","CACTI","TEACH","WALTZ","BLISS","MARRY"],
+    /* shared message = "<shareTitle> 3/6 <shareEmoji>" + emoji grid + shareLine */
+    shareTitle: "Deema’s Bridal Love Letter",
+    shareEmoji: "💍",
+    shareLine:  "Can you beat that?",
     winTitle:  "Wickedly good! 🖤",
     loseTitle: "So close!"
   },
 
-  /* ---------- CONNECTIONS ----------
+  /* ---------- THE PERFECT MATCH (Connections-style) ----------
      key = colour: y (yellow, easiest) g (green) b (blue) p (purple, hardest).
      Four words per group. */
   connections: {
@@ -51,7 +61,7 @@ window.GAME_CONFIG = {
     winTitle:  "Wickedly good! 🖤"
   },
 
-  /* ---------- MINI CROSSWORD ----------
+  /* ---------- DEEMA'S CROSSWORD (mini crossword) ----------
      layout: "." = open square, "#" = black square.
      answers/clues are keyed "row,col,A|D" = where the word STARTS
      (row 0 / col 0 = top-left) and whether it runs Across or Down.
@@ -76,7 +86,11 @@ window.GAME_CONFIG = {
       "0,2,D": "What Deema’s students do in her Arizona classroom",
       "0,4,D": "Sheet music for her guitar or ukulele"
     },
+    /* shared message = "<shareTitle> <time> <shareEmoji>" + shareLine. {time} = e.g. 1:23 */
+    shareTitle: "Deema’s Bridal Crossword",
+    shareEmoji: "⏱️",
+    shareLine:  "Can you beat that?",
     winTitle: "Perfectly puzzled!",
-    winSub:   "You solved the Mini. 🥀"
+    winSub:   "You solved it in {time}. 🥀"
   }
 };

@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Deema’s Games">
-<title>Wordle — Deema’s Bridal Shower</title>
+<title>Love Letters — Deema’s Bridal Shower</title>
 <link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="theme.css">
@@ -25,9 +25,9 @@
 <div class="wrap">
 
   <div class="game-header">
-    <a class="back-link" href="index.html">&larr; <span data-cfg="site.backLabel">Games</span></a>
-    <h1 class="game-title" data-cfg="games.wordle.title">Wordle</h1>
-    <span class="header-spacer back-link" aria-hidden="true">&larr; <span data-cfg="site.backLabel">Games</span></span>
+    <a class="back-link" href="index.html" aria-label="Back to games"><span class="arrow">&larr;</span><span class="back-label" data-cfg="site.backLabel">Games</span></a>
+    <h1 class="game-title" data-cfg="games.wordle.title">Love Letters</h1>
+    <span class="header-spacer back-link" aria-hidden="true"><span class="arrow">&larr;</span><span class="back-label" data-cfg="site.backLabel">Games</span></span>
   </div>
   <p class="game-sub" data-cfg="games.wordle.sub">Six tries to say “I do.”</p>
 
@@ -56,8 +56,9 @@
     </div>
     <h2 id="winTitle"></h2>
     <p id="winSub"></p>
-    <p class="share-line" id="shareLine"></p>
+    <p class="share-line share-head" id="shareLine"></p>
     <div class="win-emoji-grid" id="winEmojiGrid"></div>
+    <p class="share-line share-close" id="shareClose"></p>
     <div class="share-row" id="shareRow">
       <button class="share-btn whatsapp" id="shareWhatsapp">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.87 9.87 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.91C21.96 6.45 17.5 2 12.04 2Z"/></svg>
@@ -71,23 +72,30 @@
 </div>
 
 <script src="config.js"></script>
+<script src="words.js"></script>
 <script src="confetti.js"></script>
 <script src="haptics.js"></script>
 <script src="common.js"></script>
 <script>
 /* ============================================================
    All words + wording come from config.js (GAME_CONFIG.wordle).
-   First play is always firstWord; "New word" then draws randomly
-   from altWords (never repeating the previous one).
+   First play is always firstWord; "New word" then deals from a
+   shuffled copy of altWords (every word comes up before any repeat).
+   Guesses must be real words (words.js) or one of the game's own answers.
    ============================================================ */
 const CFG = GAME_CONFIG.wordle;
 const FIRST_WORD = CFG.firstWord.toUpperCase();
 const ALT_WORDS = CFG.altWords.map(w => w.toUpperCase());
 const ROWS = 6;
 const LEN = FIRST_WORD.length;
-const SHARE_LINE = CFG.shareLine;
+
+const VALID = new Set(((window.VALID_WORDS || '').toUpperCase().match(/.{5}/g)) || []);
+[FIRST_WORD, ...ALT_WORDS].forEach(w => VALID.add(w));
+const DICT_OK = VALID.size > 1000;   // if the word list failed to load, don't block every guess
 
 let ANSWER = FIRST_WORD;
+let gen = 0;          // bumps on every new game so timers from an old game can't touch the new one
+let bag = [];         // shuffled replay words
 let board = document.getElementById('board');
 let keyboard = document.getElementById('keyboard');
 let toastEl = document.getElementById('toast');
@@ -163,7 +171,7 @@ KEY_ROWS.forEach(row=>{
     const btn = document.createElement('button');
     btn.className = 'key' + (k.length>1 ? ' wide' : '');
     btn.textContent = k === 'DEL' ? 'Del' : (k === 'ENTER' ? 'Enter' : k);
-    btn.addEventListener('click', ()=>handleKey(k));
+    btn.addEventListener('click', ()=>{ handleKey(k); btn.blur(); });   // blur: a physical Enter must never re-press this key
     rowEl.appendChild(btn);
     keyEls[k] = btn;
   });
@@ -194,10 +202,10 @@ function handleKey(k){
 }
 
 document.addEventListener('keydown', (e)=>{
-  if(gameOver || e.metaKey || e.ctrlKey || e.altKey) return;
+  if(gameOver || e.metaKey || e.ctrlKey || e.altKey) return;   // (game over: Enter/Space work on the win-screen buttons)
   const k = e.key.toUpperCase();
-  if(k === 'ENTER') handleKey('ENTER');
-  else if(k === 'BACKSPACE') handleKey('DEL');
+  if(k === 'ENTER'){ e.preventDefault(); handleKey('ENTER'); }   // preventDefault: stops Enter also "clicking" whichever button has focus
+  else if(k === 'BACKSPACE'){ e.preventDefault(); handleKey('DEL'); }
   else if(/^[A-Z]$/.test(k)) handleKey(k);
 });
 
@@ -217,16 +225,22 @@ function renderCurrent(){
   }
 }
 
+function rejectGuess(msg){
+  showToast(msg);
+  sound.error();
+  haptic(15);
+  shakeRow(guesses.length);
+}
+
 function submitGuess(){
-  if(current.length < LEN){
-    showToast('Not enough letters');
-    sound.error();
-    shakeRow(guesses.length);
-    return;
-  }
+  if(current.length < LEN){ rejectGuess('Not enough letters'); return; }
   const guess = current;
+  if(guesses.includes(guess)){ rejectGuess('Already guessed'); return; }
+  if(DICT_OK && !VALID.has(guess)){ rejectGuess('Not in word list'); return; }
+
+  const myGen = gen;
   const result = scoreGuess(guess, ANSWER);
-  paintRow(guesses.length, guess, result);
+  paintRow(guesses.length, guess, result, myGen);
   guesses.push(guess);
   guessResults.push(result);
   current = "";
@@ -234,6 +248,7 @@ function submitGuess(){
   if(guess === ANSWER){
     gameOver = true;
     setTimeout(()=>{
+      if(myGen !== gen) return;
       sound.win();
       haptic([15,40,15,40,25]);
       launchConfettiBurst();
@@ -244,6 +259,7 @@ function submitGuess(){
   if(guesses.length === ROWS){
     gameOver = true;
     setTimeout(()=>{
+      if(myGen !== gen) return;
       sound.lose();
       openWinModal(false);
     }, 1650);
@@ -265,14 +281,16 @@ function scoreGuess(guess, answer){
   return result;
 }
 
-function paintRow(rowIdx, guess, result){
+function paintRow(rowIdx, guess, result, myGen){
   const cells = rows[rowIdx];
   result.forEach((res, i)=>{
     const cell = cells[i];
     setTimeout(()=>{
+      if(myGen !== gen) return;
       cell.classList.add('flip');
       sound.reveal(res, 0);
       setTimeout(()=>{
+        if(myGen !== gen) return;
         cell.textContent = guess[i];
         cell.classList.add(res);
         updateKey(guess[i], res);
@@ -300,12 +318,26 @@ function shakeRow(rowIdx){
 }
 
 /* ---------------- restart / new word ---------------- */
+function shuffled(arr){
+  const a = [...arr];
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
 function pickNewWord(){
-  const pool = ALT_WORDS.filter(w => w !== ANSWER);
-  return pool[Math.floor(Math.random() * pool.length)];
+  if(!bag.length){
+    bag = shuffled(ALT_WORDS);
+    // words are drawn from the END of the bag: make sure the next one isn't the word just played
+    if(bag[bag.length-1] === ANSWER) bag.unshift(bag.pop());
+  }
+  return bag.pop();
 }
 
 function resetGame(newAnswer){
+  gen++;                                   // cancels any flip/win timers still pending from the old game
+  if(document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   ANSWER = newAnswer;
   guesses = [];
   guessResults = [];
@@ -334,6 +366,7 @@ const winSeal = document.getElementById('winSeal');
 const winTitle = document.getElementById('winTitle');
 const winSub = document.getElementById('winSub');
 const shareLine = document.getElementById('shareLine');
+const shareClose = document.getElementById('shareClose');
 const shareRow = document.getElementById('shareRow');
 const winEmojiGrid = document.getElementById('winEmojiGrid');
 
@@ -342,20 +375,27 @@ function buildEmojiGrid(){
   return guessResults.map(row => row.map(r => map[r]).join('')).join('\n');
 }
 
+// e.g. "Deema’s Bridal Love Letter 3/6 💍"  (X/6 if she didn't get it)
+function resultLine(){
+  const score = guesses[guesses.length-1] === ANSWER ? guesses.length : 'X';
+  return `${CFG.shareTitle} ${score}/${ROWS} ${CFG.shareEmoji}`;
+}
+
 function openWinModal(won){
   winEmojiGrid.textContent = buildEmojiGrid();
   if(won){
     winSeal.classList.remove('hidden');
     winTitle.textContent = CFG.winTitle;
     winSub.textContent = `You got it in ${guesses.length} guess${guesses.length===1?'':'es'}.`;
-    shareLine.textContent = '“' + SHARE_LINE + '”';
-    shareLine.style.display = '';
+    shareLine.textContent = resultLine();
+    shareClose.textContent = CFG.shareLine;
+    shareLine.style.display = shareClose.style.display = '';
     shareRow.style.display = '';
   } else {
     winSeal.classList.add('hidden');
     winTitle.textContent = CFG.loseTitle;
     winSub.textContent = `The word was ${ANSWER}. Fancy another round?`;
-    shareLine.style.display = 'none';
+    shareLine.style.display = shareClose.style.display = 'none';
     shareRow.style.display = 'none';
   }
   modalOverlay.classList.add('show');
@@ -367,7 +407,7 @@ document.getElementById('playAgainBtn').addEventListener('click', ()=>{
 });
 modalOverlay.addEventListener('click', (e)=>{ if(e.target === modalOverlay) closeWinModal(); });
 
-function shareText(){ return `${SHARE_LINE}\n\n${buildEmojiGrid()}`; }
+function shareText(){ return `${resultLine()}\n${buildEmojiGrid()}\n${CFG.shareLine}`; }
 
 document.getElementById('shareWhatsapp').addEventListener('click', ()=>{
   window.open('https://wa.me/?text=' + encodeURIComponent(shareText()), '_blank');
