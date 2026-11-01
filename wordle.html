@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
+
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="favicon-180.png">
+<meta name="theme-color" content="#0E090A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Deema’s Games">
+<title>Wordle — Deema’s Bridal Shower</title>
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="theme.css">
+</head>
+<body data-title="games.wordle.title">
+
+<div class="confetti"></div>
+
+<div class="wrap">
+
+  <div class="game-header">
+    <a class="back-link" href="index.html">&larr; <span data-cfg="site.backLabel">Games</span></a>
+    <h1 class="game-title" data-cfg="games.wordle.title">Wordle</h1>
+    <span class="header-spacer back-link" aria-hidden="true">&larr; <span data-cfg="site.backLabel">Games</span></span>
+  </div>
+  <p class="game-sub" data-cfg="games.wordle.sub">Six tries to say “I do.”</p>
+
+  <div class="wordle-board" id="board"></div>
+
+  <div class="keyboard" id="keyboard"></div>
+
+  <div class="restart-row">
+    <button class="restart-btn" id="resetBtn" title="Start over with a new word">
+      &#8635; New word
+    </button>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Win / lose modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="win-modal">
+    <div class="win-seal" id="winSeal">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2c.6 3.6 2.4 5.4 6 6-3.6.6-5.4 2.4-6 6-.6-3.6-2.4-5.4-6-6 3.6-.6 5.4-2.4 6-6Z" fill="#fff"/>
+        <path d="M19 15c.3 1.8 1.2 2.7 3 3-1.8.3-2.7 1.2-3 3-.3-1.8-1.2-2.7-3-3 1.8-.3 2.7-1.2 3-3Z" fill="#fff" opacity="0.85"/>
+      </svg>
+    </div>
+    <h2 id="winTitle"></h2>
+    <p id="winSub"></p>
+    <p class="share-line" id="shareLine"></p>
+    <div class="win-emoji-grid" id="winEmojiGrid"></div>
+    <div class="share-row" id="shareRow">
+      <button class="share-btn whatsapp" id="shareWhatsapp">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.87 9.87 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.91C21.96 6.45 17.5 2 12.04 2Z"/></svg>
+        Share on WhatsApp
+      </button>
+      <button class="share-btn native" id="shareNative">&#128241; Share</button>
+      <button class="share-btn copy" id="shareCopy">Copy message</button>
+    </div>
+    <button class="play-again-btn" id="playAgainBtn">&#8635; Play again</button>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="confetti.js"></script>
+<script src="haptics.js"></script>
+<script src="common.js"></script>
+<script>
+/* ============================================================
+   All words + wording come from config.js (GAME_CONFIG.wordle).
+   First play is always firstWord; "New word" then draws randomly
+   from altWords (never repeating the previous one).
+   ============================================================ */
+const CFG = GAME_CONFIG.wordle;
+const FIRST_WORD = CFG.firstWord.toUpperCase();
+const ALT_WORDS = CFG.altWords.map(w => w.toUpperCase());
+const ROWS = 6;
+const LEN = FIRST_WORD.length;
+const SHARE_LINE = CFG.shareLine;
+
+let ANSWER = FIRST_WORD;
+let board = document.getElementById('board');
+let keyboard = document.getElementById('keyboard');
+let toastEl = document.getElementById('toast');
+
+let guesses = [];
+let guessResults = [];
+let current = "";
+let gameOver = false;
+
+/* ---------------- sound (synthesized, no external files) ---------------- */
+let audioCtx = null;
+function ctx(){
+  if(!audioCtx){ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function tone(freq, dur, type='sine', vol=0.14, delay=0, glideTo=null){
+  try{
+    const c = ctx();
+    const osc = c.createOscillator();
+    const gain = c.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, c.currentTime + delay);
+    if(glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, c.currentTime + delay + dur);
+    gain.gain.setValueAtTime(vol, c.currentTime + delay);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + delay + dur);
+    osc.connect(gain).connect(c.destination);
+    osc.start(c.currentTime + delay);
+    osc.stop(c.currentTime + delay + dur + 0.02);
+  } catch(e){ /* audio unsupported — fail silently */ }
+}
+const sound = {
+  key: () => tone(520, 0.045, 'square', 0.05),
+  del: () => tone(280, 0.05, 'square', 0.05),
+  reveal: (result, i) => {
+    const freqs = { absent: 190, present: 340, correct: 500 };
+    tone(freqs[result], 0.16, 'sine', 0.11, i * 0.05);
+  },
+  error: () => { tone(160, 0.12, 'sawtooth', 0.09); tone(120, 0.14, 'sawtooth', 0.08, 0.08); },
+  win: () => {
+    const notes = [523, 659, 784, 1047];
+    notes.forEach((f,i)=> tone(f, 0.22, 'triangle', 0.13, i * 0.11));
+  },
+  lose: () => { tone(300, 0.3, 'sine', 0.1); tone(220, 0.4, 'sine', 0.09, 0.15); }
+};
+
+const rows = [];
+for(let r=0; r<ROWS; r++){
+  const rowEl = document.createElement('div');
+  rowEl.className = 'wordle-row';
+  rowEl.style.gridTemplateColumns = `repeat(${LEN}, 1fr)`;
+  const cells = [];
+  for(let c=0;c<LEN;c++){
+    const cell = document.createElement('div');
+    cell.className = 'wordle-cell';
+    rowEl.appendChild(cell);
+    cells.push(cell);
+  }
+  board.appendChild(rowEl);
+  rows.push(cells);
+}
+
+const KEY_ROWS = [
+  "QWERTYUIOP".split(""),
+  "ASDFGHJKL".split(""),
+  ["ENTER", ..."ZXCVBNM".split(""), "DEL"]
+];
+const keyEls = {};
+KEY_ROWS.forEach(row=>{
+  const rowEl = document.createElement('div');
+  rowEl.className = 'key-row';
+  row.forEach(k=>{
+    const btn = document.createElement('button');
+    btn.className = 'key' + (k.length>1 ? ' wide' : '');
+    btn.textContent = k === 'DEL' ? 'Del' : (k === 'ENTER' ? 'Enter' : k);
+    btn.addEventListener('click', ()=>handleKey(k));
+    rowEl.appendChild(btn);
+    keyEls[k] = btn;
+  });
+  keyboard.appendChild(rowEl);
+});
+
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(()=>toastEl.classList.remove('show'), 1400);
+}
+
+function handleKey(k){
+  if(gameOver) return;
+  if(k === 'ENTER'){
+    haptic(10);
+    submitGuess();
+  } else if(k === 'DEL'){
+    if(current.length){ sound.del(); haptic(8); }
+    current = current.slice(0,-1);
+    renderCurrent();
+  } else if(/^[A-Z]$/.test(k) && current.length < LEN){
+    sound.key();
+    haptic(6);
+    current += k;
+    renderCurrent();
+  }
+}
+
+document.addEventListener('keydown', (e)=>{
+  if(gameOver || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toUpperCase();
+  if(k === 'ENTER') handleKey('ENTER');
+  else if(k === 'BACKSPACE') handleKey('DEL');
+  else if(/^[A-Z]$/.test(k)) handleKey(k);
+});
+
+function renderCurrent(){
+  const rowIdx = guesses.length;
+  const cells = rows[rowIdx];
+  for(let i=0;i<LEN;i++){
+    const cell = cells[i];
+    if(i < current.length){
+      cell.textContent = current[i];
+      cell.classList.add('filled', 'pop');
+      setTimeout(()=>cell.classList.remove('pop'), 120);
+    } else {
+      cell.textContent = '';
+      cell.classList.remove('filled');
+    }
+  }
+}
+
+function submitGuess(){
+  if(current.length < LEN){
+    showToast('Not enough letters');
+    sound.error();
+    shakeRow(guesses.length);
+    return;
+  }
+  const guess = current;
+  const result = scoreGuess(guess, ANSWER);
+  paintRow(guesses.length, guess, result);
+  guesses.push(guess);
+  guessResults.push(result);
+  current = "";
+
+  if(guess === ANSWER){
+    gameOver = true;
+    setTimeout(()=>{
+      sound.win();
+      haptic([15,40,15,40,25]);
+      launchConfettiBurst();
+      openWinModal(true);
+    }, 1650);
+    return;
+  }
+  if(guesses.length === ROWS){
+    gameOver = true;
+    setTimeout(()=>{
+      sound.lose();
+      openWinModal(false);
+    }, 1650);
+  }
+}
+
+function scoreGuess(guess, answer){
+  const result = new Array(LEN).fill('absent');
+  const answerLetters = answer.split("");
+  const used = new Array(LEN).fill(false);
+  for(let i=0;i<LEN;i++){
+    if(guess[i] === answer[i]){ result[i] = 'correct'; used[i] = true; }
+  }
+  for(let i=0;i<LEN;i++){
+    if(result[i] === 'correct') continue;
+    const idx = answerLetters.findIndex((ch,j)=> ch === guess[i] && !used[j]);
+    if(idx !== -1){ result[i] = 'present'; used[idx] = true; }
+  }
+  return result;
+}
+
+function paintRow(rowIdx, guess, result){
+  const cells = rows[rowIdx];
+  result.forEach((res, i)=>{
+    const cell = cells[i];
+    setTimeout(()=>{
+      cell.classList.add('flip');
+      sound.reveal(res, 0);
+      setTimeout(()=>{
+        cell.textContent = guess[i];
+        cell.classList.add(res);
+        updateKey(guess[i], res);
+      }, 250);
+    }, i * 220);
+  });
+}
+
+const KEY_PRIORITY = { absent:0, present:1, correct:2 };
+function updateKey(letter, res){
+  const btn = keyEls[letter];
+  if(!btn) return;
+  const cur = btn.dataset.state;
+  if(!cur || KEY_PRIORITY[res] > KEY_PRIORITY[cur]){
+    btn.dataset.state = res;
+    btn.classList.remove('absent','present','correct');
+    btn.classList.add(res);
+  }
+}
+
+function shakeRow(rowIdx){
+  const rowEl = rows[rowIdx][0].parentElement;
+  rowEl.style.animation = 'shake .4s ease';
+  setTimeout(()=> rowEl.style.animation = '', 400);
+}
+
+/* ---------------- restart / new word ---------------- */
+function pickNewWord(){
+  const pool = ALT_WORDS.filter(w => w !== ANSWER);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function resetGame(newAnswer){
+  ANSWER = newAnswer;
+  guesses = [];
+  guessResults = [];
+  current = "";
+  gameOver = false;
+  rows.forEach(cells=>cells.forEach(cell=>{
+    cell.textContent = '';
+    cell.className = 'wordle-cell';
+  }));
+  Object.values(keyEls).forEach(btn=>{
+    btn.classList.remove('absent','present','correct');
+    delete btn.dataset.state;
+  });
+}
+
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  const midGame = !gameOver && guesses.length > 0;
+  if(midGame && !confirm('Give up on this word and start a new one?')) return;
+  closeWinModal();
+  resetGame(pickNewWord());
+});
+
+/* ---------------- win modal + share ---------------- */
+const modalOverlay = document.getElementById('modalOverlay');
+const winSeal = document.getElementById('winSeal');
+const winTitle = document.getElementById('winTitle');
+const winSub = document.getElementById('winSub');
+const shareLine = document.getElementById('shareLine');
+const shareRow = document.getElementById('shareRow');
+const winEmojiGrid = document.getElementById('winEmojiGrid');
+
+function buildEmojiGrid(){
+  const map = { correct: '🟩', present: '🟨', absent: '⬛' };
+  return guessResults.map(row => row.map(r => map[r]).join('')).join('\n');
+}
+
+function openWinModal(won){
+  winEmojiGrid.textContent = buildEmojiGrid();
+  if(won){
+    winSeal.classList.remove('hidden');
+    winTitle.textContent = CFG.winTitle;
+    winSub.textContent = `You got it in ${guesses.length} guess${guesses.length===1?'':'es'}.`;
+    shareLine.textContent = '“' + SHARE_LINE + '”';
+    shareLine.style.display = '';
+    shareRow.style.display = '';
+  } else {
+    winSeal.classList.add('hidden');
+    winTitle.textContent = CFG.loseTitle;
+    winSub.textContent = `The word was ${ANSWER}. Fancy another round?`;
+    shareLine.style.display = 'none';
+    shareRow.style.display = 'none';
+  }
+  modalOverlay.classList.add('show');
+}
+function closeWinModal(){ modalOverlay.classList.remove('show'); }
+document.getElementById('playAgainBtn').addEventListener('click', ()=>{
+  closeWinModal();
+  resetGame(pickNewWord());
+});
+modalOverlay.addEventListener('click', (e)=>{ if(e.target === modalOverlay) closeWinModal(); });
+
+function shareText(){ return `${SHARE_LINE}\n\n${buildEmojiGrid()}`; }
+
+document.getElementById('shareWhatsapp').addEventListener('click', ()=>{
+  window.open('https://wa.me/?text=' + encodeURIComponent(shareText()), '_blank');
+});
+document.getElementById('shareNative').addEventListener('click', async ()=>{
+  if(navigator.share){
+    try{ await navigator.share({ text: shareText() }); } catch(e){ /* cancelled */ }
+  } else { copyToClipboard(); }
+});
+document.getElementById('shareCopy').addEventListener('click', copyToClipboard);
+
+function copyToClipboard(){
+  navigator.clipboard.writeText(shareText()).then(()=>{
+    showToast('Copied — paste it anywhere!');
+  }).catch(()=>{
+    showToast('Could not copy — try Share instead');
+  });
+}
+</script>
+</body>
+</html>

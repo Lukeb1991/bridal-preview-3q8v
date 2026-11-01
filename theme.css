@@ -1,0 +1,267 @@
+/* ============================================================
+   THEME — Vintage Gothic (black, deep red, lace)
+   Loaded AFTER styles.css. To re-theme for another customer,
+   change the colour/font variables in the first block; the
+   decoration below (lace, damask, dividers) can stay or go.
+   ============================================================ */
+
+:root{
+  /* surfaces + text */
+  --ivory:#0E090A;
+  --paper:#191113;
+  --ink:#EFE4D8;
+  --ink-soft:#B6A599;
+  --rule:#3B2227;
+
+  /* accents */
+  --rose:#8E1B2C;           /* fills: clue bar, borders */
+  --rose-deep:#DC5468;      /* red used for TEXT on black (lighter so it's readable) */
+  --gold:#C9B79F;           /* antique lace / bone for small details */
+  --gold-soft:#3B2227;
+  --on-accent:#F6EDE3;
+
+  --btn-bg:#8E1B2C;
+  --btn-fg:#F6EDE3;
+  --btn-hover:#B02238;
+  --toast-bg:#8E1B2C;
+  --toast-fg:#F6EDE3;
+  --overlay:rgba(5,2,3,0.78);
+
+  /* Wordle */
+  --correct:#3D7A58;
+  --present:#B08A2E;
+  --absent:#3A2F32;
+  --cell-filled:#85666B;
+  --key-bg:#2A1D20;
+  --key-hover:#3A272B;
+
+  /* Connections (fill colour + dark text on top) */
+  --tile-bg:#241A1D;
+  --tile-hover:#33262A;
+  --selected-bg:#EFE4D8;
+  --selected-fg:#0E090A;
+  --cat-yellow-bg:#CDA94E;  --cat-yellow:#1A1012;
+  --cat-green-bg:#6E9A74;   --cat-green:#0F1A12;
+  --cat-blue-bg:#6F8FB5;    --cat-blue:#0E1520;
+  --cat-purple-bg:#9A6FA6;  --cat-purple:#1B0F1F;
+
+  /* Mini crossword: aged-paper squares on black */
+  --xw-cell:#E9DFD1;
+  --xw-ink:#150E10;
+  --xw-num:#5E4B4E;
+  --xw-line:#050304;
+  --xw-word:#D9BFB6;
+  --xw-active:#A3213A;
+  --xw-active-ink:#F6EDE3;
+
+  /* confetti (comma separated): deep-red petals + a little bone */
+  --confetti:#8E1B2C,#B02238,#6A1020,#D9CBB9,#C0394D;
+
+  /* fonts */
+  --font-display:'UnifrakturCook','Cinzel',serif;
+  --font-heading:'Cinzel',Georgia,serif;
+  --font-italic:'Cormorant Garamond',Georgia,serif;
+  --font-letters:'Cinzel',Georgia,serif;
+
+  --shadow:0 1px 2px rgba(0,0,0,0.45), 0 8px 24px rgba(0,0,0,0.5);
+  --shadow-hover:0 4px 6px rgba(0,0,0,0.5), 0 16px 32px rgba(0,0,0,0.6);
+}
+
+::selection{ background:#8E1B2C; color:#F6EDE3; }
+html{ background:var(--ivory); }
+
+/* ---------- background: damask wallpaper + vignette ---------- */
+body::before{
+  background-image:
+    radial-gradient(ellipse at 50% 0%, rgba(14,9,10,0) 0, rgba(14,9,10,0.55) 62%, rgba(14,9,10,0.92) 100%),
+    url('damask.svg');
+  background-size:auto, 120px 168px;
+  opacity:0.55;
+}
+
+/* ---------- lace trim along the top edge of every page ---------- */
+body::after{
+  content:"";
+  position:fixed; top:0; left:0; right:0;
+  height:24px;
+  background:url('lace-edge.svg') repeat-x 0 0 / 40px 24px;
+  z-index:5;
+  pointer-events:none;
+  opacity:0.92;
+}
+
+/* ---------- type ---------- */
+.eyebrow{
+  font-family:var(--font-heading);
+  font-weight:500;
+  font-size:11px;
+  letter-spacing:0.26em;
+  color:var(--rose-deep);
+  margin-top:10px;
+}
+.masthead{
+  font-style:normal;
+  font-weight:700;
+  font-size:clamp(56px,16vw,92px);
+  line-height:0.95;
+  letter-spacing:0;
+  color:var(--ink);
+  text-shadow:0 2px 24px rgba(142,27,44,0.55);
+}
+.masthead .amp{
+  font-family:var(--font-italic);
+  font-style:italic;
+  font-weight:600;
+  font-size:0.36em;
+  letter-spacing:0.04em;
+  margin-top:0.35em;
+  color:var(--rose-deep);
+  text-shadow:none;
+}
+.subhead{
+  font-family:var(--font-heading);
+  font-weight:500;
+  font-size:12px;
+  letter-spacing:0.18em;
+  text-transform:uppercase;
+  line-height:1.9;
+  white-space:pre-line;
+  color:var(--ink-soft);
+}
+
+/* ornamental divider replaces the plain rule */
+.rule{
+  border:none;
+  height:24px;
+  max-width:none;
+  margin:26px auto 4px;
+  background:url('divider.svg') center / 300px 24px no-repeat;
+}
+.rule::after{ content:none; }
+
+/* ---------- landing tiles: dark card with a strip of lace ---------- */
+.tile{
+  overflow:hidden;
+  padding-top:44px;
+  background:linear-gradient(180deg, #1D1416 0%, #150E10 100%);
+  border-color:var(--rule);
+}
+.tile::before{
+  content:"";
+  position:absolute; top:0; left:0; right:0; height:24px;
+  background:url('lace-edge.svg') repeat-x center top / 40px 24px;
+  opacity:0.8;
+}
+.tile:hover{ border-color:var(--rose); }
+.tile h2{
+  font-family:var(--font-heading);
+  font-weight:700;
+  font-size:18px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+}
+.tile p{
+  font-family:var(--font-italic);
+  font-style:italic;
+  font-size:16px;
+  letter-spacing:0;
+}
+.tile .tag{
+  font-family:var(--font-heading);
+  font-weight:500;
+  font-size:10px;
+  letter-spacing:0.2em;
+  color:var(--rose-deep);
+}
+.tile-icon{ width:84px; max-height:84px; margin-bottom:0; }
+
+footer.foot{
+  font-family:var(--font-italic);
+  font-size:17px;
+  margin-top:40px;
+  color:var(--ink-soft);
+}
+footer.foot::before{
+  content:""; display:block; height:24px; margin-bottom:12px;
+  background:url('divider.svg') center / 260px 24px no-repeat;
+}
+
+/* ---------- game pages ---------- */
+.game-title{
+  font-family:var(--font-heading);
+  font-style:normal;
+  font-weight:700;
+  font-size:22px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+}
+.game-sub{
+  font-family:var(--font-italic);
+  font-style:italic;
+  font-size:16px;
+  color:var(--ink-soft);
+}
+.back-link{
+  background:rgba(25,17,19,0.85);
+  border-color:var(--rule);
+  font-size:12.5px;
+  letter-spacing:0.04em;
+}
+.back-link:hover{ border-color:var(--rose-deep); color:var(--ink); }
+
+.wordle-cell{ font-weight:700; letter-spacing:0; }
+.wordle-cell.correct{ box-shadow:inset 0 0 0 1px rgba(255,255,255,0.12); }
+.key{ color:var(--ink); }
+.key.correct,.key.present,.key.absent{ color:var(--on-accent); }
+
+.conn-instructions{ font-family:var(--font-italic); font-style:italic; font-size:15px; }
+.conn-cell{ border:1px solid #3A2A2E; }
+.conn-cell.selected{ border-color:var(--selected-bg); }
+.solved-group{ border:1px solid rgba(0,0,0,0.25); }
+.mistakes{ font-family:var(--font-heading); font-size:11.5px; letter-spacing:0.18em; text-transform:uppercase; }
+.mistakes .dot.used{ background:#B02238; }
+
+.xw-board{ box-shadow:0 0 0 1.5px #5A3036, 0 10px 30px rgba(0,0,0,0.55); }
+.xw-clue-text{ font-family:var(--font-italic); font-style:normal; font-weight:600; font-size:16px; line-height:1.25; }
+.xw-cluebar{ border:1px solid rgba(255,255,255,0.12); }
+.xw-num{ font-family:var(--font-heading); font-weight:700; }
+.xw-cell.active-cell .xw-num{ color:#F6EDE3; }
+.xw-clue-text,.tile p,.game-sub,.win-modal p,.share-line,.conn-instructions,footer.foot{ font-variant-numeric:lining-nums; font-feature-settings:'lnum' 1; }
+
+/* ---------- modal ---------- */
+.win-modal{
+  background:linear-gradient(180deg, #1D1416 0%, #150E10 100%);
+  border:1px solid var(--rule);
+  padding-top:50px;
+  overflow:hidden;
+}
+.win-modal::before{
+  content:""; position:absolute; top:0; left:0; right:0; height:24px;
+  background:url('lace-edge.svg') repeat-x center top / 40px 24px;
+  opacity:0.85;
+}
+.win-seal{
+  background:#8E1B2C;
+  border:1.5px solid #D9CBB9;
+  box-shadow:0 0 0 4px rgba(142,27,44,0.28);
+}
+.win-seal svg path{ fill:#F6EDE3; }
+.win-modal h2{ font-family:var(--font-heading); font-style:normal; font-weight:700; font-size:21px; letter-spacing:0.06em; text-transform:uppercase; }
+.win-modal p{ font-family:var(--font-italic); font-style:italic; font-size:16px; }
+.share-line{ font-family:var(--font-italic); font-size:17px; line-height:1.3; }
+.restart-btn{ background:transparent; border-color:#8E1B2C; }
+
+/* ---------- confetti → petals ---------- */
+.confetti span{ border-radius:60% 0 60% 0; opacity:0.5; }
+.burst-piece{ border-radius:60% 0 60% 0; }
+
+/* ---------- small phones: slimmer lace so nothing is crowded ---------- */
+@media (max-width:480px){
+  body::after{ height:18px; background-size:30px 18px; }
+  .wrap{ padding-top:24px; }
+  .eyebrow{ margin-top:14px; }
+  .game-title{ font-size:18px; letter-spacing:0.06em; }
+  .game-sub{ font-size:15px; }
+  .xw-clue-text{ font-size:14.5px; }
+  .tile{ padding-top:40px; }
+}

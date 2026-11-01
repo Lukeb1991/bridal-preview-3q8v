@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
+
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="favicon-180.png">
+<meta name="theme-color" content="#0E090A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Deema’s Games">
+<title>Connections — Deema’s Bridal Shower</title>
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="theme.css">
+</head>
+<body data-title="games.connections.title">
+
+<div class="confetti"></div>
+
+<div class="wrap">
+
+  <div class="game-header">
+    <a class="back-link" href="index.html">&larr; <span data-cfg="site.backLabel">Games</span></a>
+    <h1 class="game-title" data-cfg="games.connections.title">Connections</h1>
+    <span class="header-spacer back-link" aria-hidden="true">&larr; <span data-cfg="site.backLabel">Games</span></span>
+  </div>
+  <p class="game-sub" data-cfg="games.connections.sub">Sixteen words. Four secrets.</p>
+  <p class="conn-instructions">Pick four items that share a connection.</p>
+
+  <div id="solvedGroups"></div>
+  <div class="conn-grid" id="grid"></div>
+
+  <div class="mistakes" id="mistakes"></div>
+
+  <div class="conn-controls">
+    <button class="pill-btn ghost" id="shuffleBtn">Shuffle</button>
+    <button class="pill-btn ghost" id="deselectBtn">Deselect all</button>
+    <button class="pill-btn" id="submitBtn">Submit</button>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Win / finish modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="win-modal">
+    <div class="win-seal" id="winSeal">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2c.6 3.6 2.4 5.4 6 6-3.6.6-5.4 2.4-6 6-.6-3.6-2.4-5.4-6-6 3.6-.6 5.4-2.4 6-6Z" fill="#fff"/>
+        <path d="M19 15c.3 1.8 1.2 2.7 3 3-1.8.3-2.7 1.2-3 3-.3-1.8-1.2-2.7-3-3 1.8-.3 2.7-1.2 3-3Z" fill="#fff" opacity="0.85"/>
+      </svg>
+    </div>
+    <h2 id="winTitle"></h2>
+    <p id="winSub"></p>
+    <p class="share-line" id="shareLine"></p>
+    <div class="win-emoji-grid" id="winEmojiGrid"></div>
+    <div class="share-row" id="shareRow">
+      <button class="share-btn whatsapp" id="shareWhatsapp">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.87 9.87 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.91C21.96 6.45 17.5 2 12.04 2Z"/></svg>
+        Share on WhatsApp
+      </button>
+      <button class="share-btn native" id="shareNative">&#128241; Share</button>
+      <button class="share-btn copy" id="shareCopy">Copy message</button>
+    </div>
+    <button class="play-again-btn" id="playAgainBtn">&#8635; Play again</button>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="confetti.js"></script>
+<script src="haptics.js"></script>
+<script src="common.js"></script>
+<script>
+/* Groups + wording come from config.js (GAME_CONFIG.connections). */
+const CFG = GAME_CONFIG.connections;
+const CATEGORIES = CFG.groups.map(g => ({ key:g.key, name:g.name, words:g.words.map(w => w.toUpperCase()) }));
+const MAX_MISTAKES = 4;
+const EMOJI = { y:'🟨', g:'🟩', b:'🟦', p:'🟪' };
+const SHARE_LINE = CFG.shareLine;
+
+let allWords = [];
+CATEGORIES.forEach(cat=>{
+  if(cat.words.length !== 4) console.warn('Group "' + cat.name + '" should have exactly 4 words');
+  cat.words.forEach(w=> allWords.push({ word:w, cat:cat.key }));
+});
+
+let order = [...allWords];
+let selected = [];
+let solved = [];
+let mistakesUsed = 0;
+let locked = false;
+let guessLog = [];
+
+const grid = document.getElementById('grid');
+const solvedGroupsEl = document.getElementById('solvedGroups');
+const mistakesEl = document.getElementById('mistakes');
+const toastEl = document.getElementById('toast');
+const submitBtn = document.getElementById('submitBtn');
+
+function shuffle(arr){
+  const a = [...arr];
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(()=>toastEl.classList.remove('show'), 1300);
+}
+
+/* Long words (e.g. EVANESCENCE) shrink until they fit their tile. */
+function fitCells(){
+  grid.querySelectorAll('.conn-cell').forEach(cell=>{
+    const span = cell.firstChild;
+    cell.style.fontSize = '';
+    let size = parseFloat(getComputedStyle(cell).fontSize);
+    const pad = parseFloat(getComputedStyle(cell).paddingLeft) * 2 + 2;
+    while(span.offsetWidth > cell.clientWidth - pad && size > 6.5){
+      size -= 0.5;
+      cell.style.fontSize = size + 'px';
+    }
+  });
+}
+window.addEventListener('resize', fitCells);
+
+function render(){
+  grid.innerHTML = '';
+  const remaining = order.filter(item => !solved.includes(item.cat));
+  remaining.forEach(item=>{
+    const cell = document.createElement('button');
+    cell.className = 'conn-cell';
+    const span = document.createElement('span');
+    span.textContent = item.word;
+    cell.appendChild(span);
+    if(selected.includes(item.word)) cell.classList.add('selected');
+    cell.addEventListener('click', ()=> toggleSelect(item.word));
+    grid.appendChild(cell);
+  });
+  fitCells();
+
+  solvedGroupsEl.innerHTML = '';
+  solved.forEach(catKey=>{
+    const cat = CATEGORIES.find(c=>c.key===catKey);
+    const div = document.createElement('div');
+    div.className = 'solved-group ' + catKey;
+    div.innerHTML = `<div class="g-title"></div><div class="g-items"></div>`;
+    div.querySelector('.g-title').textContent = cat.name;
+    div.querySelector('.g-items').textContent = cat.words.join(' · ');
+    solvedGroupsEl.appendChild(div);
+  });
+
+  mistakesEl.innerHTML = 'Mistakes remaining&nbsp; ' +
+    Array.from({length:MAX_MISTAKES}).map((_,i)=>
+      `<span class="dot${i < mistakesUsed ? ' used' : ''}"></span>`
+    ).join('');
+
+  submitBtn.disabled = selected.length !== 4;
+  if(solved.length === CATEGORIES.length) submitBtn.disabled = true;
+}
+
+function toggleSelect(word){
+  if(locked) return;
+  haptic(6);
+  if(selected.includes(word)){
+    selected = selected.filter(w=>w!==word);
+  } else {
+    if(selected.length >= 4) return;
+    selected.push(word);
+  }
+  render();
+}
+
+function submitGuess(){
+  if(selected.length !== 4 || locked) return;
+  locked = true;
+
+  const cats = selected.map(w => allWords.find(a=>a.word===w).cat);
+  guessLog.push(cats);
+  const allSame = cats.every(c => c === cats[0]);
+
+  if(allSame){
+    haptic([10,30,10]);
+    solved.push(cats[0]);
+    selected = [];
+    locked = false;
+    render();
+
+    if(solved.length === CATEGORIES.length){
+      setTimeout(()=>{ launchConfettiBurst(); openModal(true); }, 500);
+    }
+  } else {
+    const counts = {};
+    cats.forEach(c => counts[c] = (counts[c]||0) + 1);
+    const maxCount = Math.max(...Object.values(counts));
+
+    document.querySelectorAll('.conn-cell.selected').forEach(el=>el.classList.add('shake'));
+    mistakesUsed++;
+    haptic(15);
+
+    setTimeout(()=>{
+      document.querySelectorAll('.conn-cell.selected').forEach(el=>el.classList.remove('shake'));
+      if(maxCount === 3) showToast('One away…');
+      locked = false;
+
+      if(mistakesUsed >= MAX_MISTAKES){
+        CATEGORIES.forEach(c=>{ if(!solved.includes(c.key)) solved.push(c.key); });
+        selected = [];
+        render();
+        setTimeout(()=> openModal(false), 400);
+      } else {
+        render();
+      }
+    }, 420);
+  }
+}
+
+document.getElementById('submitBtn').addEventListener('click', submitGuess);
+document.getElementById('deselectBtn').addEventListener('click', ()=>{ selected = []; render(); });
+document.getElementById('shuffleBtn').addEventListener('click', ()=>{ order = shuffle(order); render(); });
+
+/* ---------------- win / lose modal + share ---------------- */
+const modalOverlay = document.getElementById('modalOverlay');
+const winSeal = document.getElementById('winSeal');
+const winTitle = document.getElementById('winTitle');
+const winSub = document.getElementById('winSub');
+const shareLine = document.getElementById('shareLine');
+const shareRow = document.getElementById('shareRow');
+const winEmojiGrid = document.getElementById('winEmojiGrid');
+
+function buildEmojiGrid(){
+  return guessLog.map(row => row.map(c => EMOJI[c]).join('')).join('\n');
+}
+
+function openModal(won){
+  winEmojiGrid.textContent = buildEmojiGrid();
+  if(won){
+    winSeal.classList.remove('hidden');
+    winTitle.textContent = CFG.winTitle;
+    winSub.textContent = `Solved with ${mistakesUsed} mistake${mistakesUsed===1?'':'s'}.`;
+    shareLine.textContent = '“' + SHARE_LINE + '”';
+    shareLine.style.display = '';
+    shareRow.style.display = '';
+  } else {
+    winSeal.classList.add('hidden');
+    winTitle.textContent = 'So close!';
+    winSub.textContent = "Out of guesses — here's the full list above.";
+    shareLine.style.display = 'none';
+    shareRow.style.display = 'none';
+  }
+  modalOverlay.classList.add('show');
+}
+function closeModal(){ modalOverlay.classList.remove('show'); }
+
+document.getElementById('playAgainBtn').addEventListener('click', ()=>{
+  closeModal();
+  selected = []; solved = []; mistakesUsed = 0; guessLog = []; locked = false;
+  order = shuffle(allWords);
+  render();
+});
+modalOverlay.addEventListener('click', (e)=>{ if(e.target === modalOverlay) closeModal(); });
+
+function shareText(){ return `${SHARE_LINE}\n\n${buildEmojiGrid()}`; }
+document.getElementById('shareWhatsapp').addEventListener('click', ()=>{
+  window.open('https://wa.me/?text=' + encodeURIComponent(shareText()), '_blank');
+});
+document.getElementById('shareNative').addEventListener('click', async ()=>{
+  if(navigator.share){
+    try{ await navigator.share({ text: shareText() }); } catch(e){}
+  } else { copyToClipboard(); }
+});
+document.getElementById('shareCopy').addEventListener('click', copyToClipboard);
+function copyToClipboard(){
+  navigator.clipboard.writeText(shareText()).then(()=>{
+    showToast('Copied — paste it anywhere!');
+  }).catch(()=>{
+    showToast('Could not copy — try Share instead');
+  });
+}
+
+order = shuffle(order);
+render();
+// fonts load after first paint; re-fit once they're ready
+if(document.fonts && document.fonts.ready) document.fonts.ready.then(fitCells);
+</script>
+</body>
+</html>

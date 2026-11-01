@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
+
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="favicon-180.png">
+<meta name="theme-color" content="#0E090A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Deema’s Games">
+<title>The Mini — Deema’s Bridal Shower</title>
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="theme.css">
+</head>
+<body data-title="games.mini.title">
+
+<div class="confetti"></div>
+
+<div class="wrap xw-wrap">
+
+  <div class="game-header">
+    <a class="back-link" href="index.html">&larr; <span data-cfg="site.backLabel">Games</span></a>
+    <h1 class="game-title" data-cfg="games.mini.title">The Mini</h1>
+    <span class="header-spacer back-link" aria-hidden="true">&larr; <span data-cfg="site.backLabel">Games</span></span>
+  </div>
+  <p class="game-sub" data-cfg="games.mini.sub">A little crossword, all about Deema.</p>
+
+  <div class="xw-board" id="board"></div>
+
+  <div class="xw-cluebar">
+    <button class="xw-nav-arrow" id="prevClue" aria-label="Previous clue">&#8249;</button>
+    <div class="xw-clue-text" id="clueText">&nbsp;</div>
+    <button class="xw-nav-arrow" id="nextClue" aria-label="Next clue">&#8250;</button>
+  </div>
+
+  <div class="keyboard xw-keyboard" id="keyboard"></div>
+
+  <div class="xw-toolbar">
+    <button class="pill-btn ghost" id="checkBtn">Check</button>
+    <button class="pill-btn ghost" id="revealBtn">Reveal</button>
+    <button class="pill-btn ghost" id="clearBtn">Clear</button>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Win modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="win-modal">
+    <div class="win-seal">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2c.6 3.6 2.4 5.4 6 6-3.6.6-5.4 2.4-6 6-.6-3.6-2.4-5.4-6-6 3.6-.6 5.4-2.4 6-6Z" fill="#fff"/>
+        <path d="M19 15c.3 1.8 1.2 2.7 3 3-1.8.3-2.7 1.2-3 3-.3-1.8-1.2-2.7-3-3 1.8-.3 2.7-1.2 3-3Z" fill="#fff" opacity="0.85"/>
+      </svg>
+    </div>
+    <h2 id="winTitle"></h2>
+    <p id="winSub"></p>
+    <button class="play-again-btn" id="modalCloseBtn">Lovely</button>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="confetti.js"></script>
+<script src="haptics.js"></script>
+<script src="common.js"></script>
+<script>
+/* Grid, answers and clues come from config.js (GAME_CONFIG.mini).
+   Numbering is generated automatically from the layout. */
+const CFG = GAME_CONFIG.mini;
+const LAYOUT = CFG.layout;
+const ANSWERS = CFG.answers;
+const CLUES = CFG.clues;
+
+const R = LAYOUT.length, C = LAYOUT[0].length;
+const isBlock = (r,c) => LAYOUT[r][c] === '#';
+
+// ---- build entries + numbering ----
+const numberAt = {};
+const entries = [];
+let numCounter = 1;
+
+for(let r=0;r<R;r++){
+  for(let c=0;c<C;c++){
+    if(isBlock(r,c)) continue;
+    const startsAcross = (c===0 || isBlock(r,c-1)) && (c+1<C && !isBlock(r,c+1));
+    const startsDown    = (r===0 || isBlock(r-1,c)) && (r+1<R && !isBlock(r+1,c));
+    if(startsAcross || startsDown){
+      numberAt[`${r},${c}`] = numCounter;
+      if(startsAcross){
+        const cells=[]; let cc=c;
+        while(cc<C && !isBlock(r,cc)){ cells.push([r,cc]); cc++; }
+        const key = `${r},${c},A`;
+        entries.push({num:numCounter, dir:'A', r, c, cells, answer:(ANSWERS[key]||'').toUpperCase(), clue:CLUES[key]||''});
+      }
+      if(startsDown){
+        const cells=[]; let rr=r;
+        while(rr<R && !isBlock(rr,c)){ cells.push([rr,c]); rr++; }
+        const key = `${r},${c},D`;
+        entries.push({num:numCounter, dir:'D', r, c, cells, answer:(ANSWERS[key]||'').toUpperCase(), clue:CLUES[key]||''});
+      }
+      numCounter++;
+    }
+  }
+}
+// navigation order: by number, across before down
+const navOrder = [...entries].sort((a,b)=> a.num - b.num || (a.dir==='A'?-1:1));
+
+// ---- state ----
+const letters = {};
+let currentEntry = navOrder[0];
+let currentPos = currentEntry.cells[0];
+let finished = false;   // true once solved or revealed (stops repeat wins)
+
+function entriesAt(r,c){
+  return entries.filter(e => e.cells.some(([er,ec]) => er===r && ec===c));
+}
+function keyOf(r,c){ return `${r},${c}`; }
+
+// ---- render grid ----
+const boardEl = document.getElementById('board');
+boardEl.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
+const cellEls = {};
+
+for(let r=0;r<R;r++){
+  for(let c=0;c<C;c++){
+    const cell = document.createElement('div');
+    cell.className = 'xw-cell';
+    if(isBlock(r,c)){
+      cell.classList.add('block');
+    } else {
+      const key = keyOf(r,c);
+      if(numberAt[key]){
+        const n = document.createElement('span');
+        n.className = 'xw-num';
+        n.textContent = numberAt[key];
+        cell.appendChild(n);
+      }
+      const letterSpan = document.createElement('span');
+      letterSpan.className = 'xw-letter';
+      cell.appendChild(letterSpan);
+      cell.addEventListener('click', ()=> cellClicked(r,c));
+      cellEls[key] = { cell, letterSpan };
+    }
+    boardEl.appendChild(cell);
+  }
+}
+
+function cellClicked(r,c){
+  haptic(6);
+  const here = entriesAt(r,c);
+  if(here.length === 0) return;
+  const samePos = currentPos[0]===r && currentPos[1]===c;
+  if(samePos && here.length > 1){
+    currentEntry = here.find(e => e !== currentEntry) || here[0];   // tap again = flip direction
+  } else if(here.includes(currentEntry)){
+    // stay in the same word, just move the cursor
+  } else {
+    currentEntry = here.find(e => e.dir === currentEntry.dir) || here[0];
+  }
+  currentPos = [r,c];
+  renderState();
+}
+
+function renderState(){
+  Object.values(cellEls).forEach(({cell}) => cell.classList.remove('active-word','active-cell'));
+  currentEntry.cells.forEach(([r,c])=>{
+    const el = cellEls[keyOf(r,c)];
+    if(el) el.cell.classList.add('active-word');
+  });
+  const curEl = cellEls[keyOf(currentPos[0],currentPos[1])];
+  if(curEl) curEl.cell.classList.add('active-cell');
+
+  const dirWord = currentEntry.dir === 'A' ? 'Across' : 'Down';
+  document.getElementById('clueText').textContent =
+    `${currentEntry.num} ${dirWord}. ${currentEntry.clue}`;
+}
+
+function renderLetters(){
+  Object.entries(cellEls).forEach(([key, {letterSpan}])=>{
+    letterSpan.textContent = letters[key] || '';
+  });
+}
+
+function moveWithinEntry(delta){
+  const idx = currentEntry.cells.findIndex(([r,c])=> r===currentPos[0] && c===currentPos[1]);
+  const newIdx = idx + delta;
+  if(newIdx >= 0 && newIdx < currentEntry.cells.length){
+    currentPos = currentEntry.cells[newIdx];
+    renderState();
+  }
+}
+
+function typeLetter(ch){
+  const key = keyOf(currentPos[0], currentPos[1]);
+  letters[key] = ch;
+  renderLetters();
+  haptic(6);
+  moveWithinEntry(1);
+  maybeAutoCheck();
+}
+
+function deleteLetter(){
+  const key = keyOf(currentPos[0], currentPos[1]);
+  if(letters[key]){
+    letters[key] = '';
+    renderLetters();
+    haptic(8);
+  } else {
+    moveWithinEntry(-1);
+    letters[keyOf(currentPos[0], currentPos[1])] = '';
+    renderLetters();
+    haptic(8);
+  }
+}
+
+document.addEventListener('keydown', (e)=>{
+  if(e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toUpperCase();
+  if(/^[A-Z]$/.test(k)){ typeLetter(k); }
+  else if(e.key === 'Backspace'){ deleteLetter(); }
+  else if(e.key === 'ArrowRight' || e.key === 'ArrowDown'){ moveWithinEntry(1); }
+  else if(e.key === 'ArrowLeft' || e.key === 'ArrowUp'){ moveWithinEntry(-1); }
+});
+
+// ---- on-screen keyboard ----
+const KEY_ROWS = [
+  "QWERTYUIOP".split(""),
+  "ASDFGHJKL".split(""),
+  [..."ZXCVBNM".split(""), 'DEL']
+];
+const keyboardEl = document.getElementById('keyboard');
+KEY_ROWS.forEach(row=>{
+  const rowEl = document.createElement('div');
+  rowEl.className = 'key-row';
+  row.forEach(k=>{
+    const btn = document.createElement('button');
+    btn.className = 'key' + (k === 'DEL' ? ' wide' : '');
+    btn.textContent = k === 'DEL' ? 'Del' : k;
+    btn.addEventListener('click', ()=>{
+      if(k === 'DEL'){ deleteLetter(); } else { typeLetter(k); }
+    });
+    rowEl.appendChild(btn);
+  });
+  keyboardEl.appendChild(rowEl);
+});
+
+// ---- clue navigation ----
+function gotoEntry(delta){
+  const idx = navOrder.indexOf(currentEntry);
+  currentEntry = navOrder[(idx + delta + navOrder.length) % navOrder.length];
+  currentPos = currentEntry.cells[0];
+  haptic(6);
+  renderState();
+}
+document.getElementById('prevClue').addEventListener('click', ()=> gotoEntry(-1));
+document.getElementById('nextClue').addEventListener('click', ()=> gotoEntry(1));
+
+// ---- check / reveal / clear / auto-complete ----
+const toastEl = document.getElementById('toast');
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(()=>toastEl.classList.remove('show'), 1600);
+}
+
+const modalOverlay = document.getElementById('modalOverlay');
+document.getElementById('winTitle').textContent = CFG.winTitle;
+document.getElementById('winSub').textContent = CFG.winSub;
+document.getElementById('modalCloseBtn').addEventListener('click', ()=> modalOverlay.classList.remove('show'));
+modalOverlay.addEventListener('click', (e)=>{ if(e.target === modalOverlay) modalOverlay.classList.remove('show'); });
+
+function gridState(){
+  let allFilled = true, allCorrect = true;
+  for(let r=0;r<R;r++){
+    for(let c=0;c<C;c++){
+      if(!isBlock(r,c) && !letters[keyOf(r,c)]) allFilled = false;
+    }
+  }
+  entries.forEach(e=>{
+    const typed = e.cells.map(([r,c])=> letters[keyOf(r,c)] || ' ').join('');
+    if(e.answer && typed !== e.answer) allCorrect = false;
+  });
+  return { allFilled, allCorrect };
+}
+
+function win(){
+  finished = true;
+  haptic([15,40,15,40,25]);
+  launchConfettiBurst();
+  modalOverlay.classList.add('show');
+}
+
+// Fires as you type: the moment the grid is full AND right, you win.
+function maybeAutoCheck(){
+  if(finished) return;
+  const s = gridState();
+  if(s.allFilled && s.allCorrect) win();
+}
+
+document.getElementById('checkBtn').addEventListener('click', ()=>{
+  const s = gridState();
+  if(!s.allFilled){ showToast('Keep going — a few squares left'); return; }
+  if(s.allCorrect){ if(!finished) win(); else modalOverlay.classList.add('show'); }
+  else { showToast('Close, but a few letters are off'); }
+});
+
+document.getElementById('revealBtn').addEventListener('click', ()=>{
+  entries.forEach(e=>{
+    e.cells.forEach(([r,c], i)=>{ if(e.answer) letters[keyOf(r,c)] = e.answer[i]; });
+  });
+  finished = true;      // revealed answers don't count as a win
+  renderLetters();
+  showToast('Answers revealed');
+});
+
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  Object.keys(letters).forEach(k=> letters[k] = '');
+  finished = false;
+  currentEntry = navOrder[0];          // back to the first square
+  currentPos = currentEntry.cells[0];
+  renderLetters();
+  renderState();
+  showToast('Cleared');
+});
+
+renderState();
+renderLetters();
+</script>
+</body>
+</html>

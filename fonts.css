@@ -1,0 +1,24 @@
+/* Self-hosted fonts (no Google Fonts request, so the page loads fast and works offline-ish).
+   Licences: UnifrakturCook, Cinzel, Cormorant Garamond, Jost are all SIL Open Font License 1.1 (free for commercial use). */
+
+@font-face{ font-family:'UnifrakturCook'; font-style:normal; font-weight:700; font-display:swap;
+  src:url('unifrakturcook-latin-700-normal.woff2') format('woff2'); }
+
+@font-face{ font-family:'Cinzel'; font-style:normal; font-weight:500; font-display:swap;
+  src:url('cinzel-latin-500-normal.woff2') format('woff2'); }
+@font-face{ font-family:'Cinzel'; font-style:normal; font-weight:700; font-display:swap;
+  src:url('cinzel-latin-700-normal.woff2') format('woff2'); }
+
+@font-face{ font-family:'Cormorant Garamond'; font-style:italic; font-weight:500; font-display:swap;
+  src:url('cormorant-garamond-latin-500-italic.woff2') format('woff2'); }
+@font-face{ font-family:'Cormorant Garamond'; font-style:italic; font-weight:600; font-display:swap;
+  src:url('cormorant-garamond-latin-600-italic.woff2') format('woff2'); }
+@font-face{ font-family:'Cormorant Garamond'; font-style:normal; font-weight:600; font-display:swap;
+  src:url('cormorant-garamond-latin-600-normal.woff2') format('woff2'); }
+
+@font-face{ font-family:'Jost'; font-style:normal; font-weight:400; font-display:swap;
+  src:url('jost-latin-400-normal.woff2') format('woff2'); }
+@font-face{ font-family:'Jost'; font-style:normal; font-weight:500; font-display:swap;
+  src:url('jost-latin-500-normal.woff2') format('woff2'); }
+@font-face{ font-family:'Jost'; font-style:normal; font-weight:600; font-display:swap;
+  src:url('jost-latin-600-normal.woff2') format('woff2'); }
