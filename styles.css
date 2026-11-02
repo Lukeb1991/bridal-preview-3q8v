@@ -211,6 +211,21 @@ footer.foot{
   font-size:14px;
 }
 
+/* small "Made by ..." line at the bottom of every page (built by common.js from config.site.credit) */
+.credit{
+  text-align:center;
+  margin:18px 0 0;
+  font-family:var(--font-body);
+  font-size:11.5px;
+  letter-spacing:0.04em;
+  line-height:1.3;
+  color:var(--ink-soft);
+}
+.credit a{ color:inherit; text-decoration:underline; text-underline-offset:2px; text-decoration-thickness:1px; }
+.credit a:hover, .credit a:focus-visible{ color:var(--rose-deep); }
+footer.foot + .credit{ margin-top:14px; }
+.credit.in-game{ margin-top:16px; }
+
 /* ---------- game chrome (shared by game pages) ---------- */
 .game-header{
   /* equal-width side slots keep the title truly centred whatever is in them

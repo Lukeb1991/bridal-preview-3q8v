@@ -23,6 +23,31 @@
     if(!/^preview/i.test(document.title)) document.title = 'Preview \u2014 ' + document.title;
   }
 
+  // Small studio credit at the bottom of every page (settings: GAME_CONFIG.site.credit).
+  // Opens in a new tab so nobody loses their game.
+  var cr = C.site && C.site.credit;
+  var wrap = document.querySelector('.wrap');
+  if(cr && cr.text && wrap){
+    var p = document.createElement('p');
+    p.className = 'credit' + (document.querySelector('footer.foot') ? '' : ' in-game');   // home page already has a footer
+    var safe = /^https:\/\//.test(cr.url || '');
+    function link(text){
+      var a = document.createElement('a');
+      a.href = cr.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.textContent = text;
+      return a;
+    }
+    if(safe && cr.linkText){
+      var s = document.createElement('span'); s.textContent = cr.text + ' \u00B7 ';
+      p.appendChild(s); p.appendChild(link(cr.linkText));
+    } else if(safe){
+      p.appendChild(link(cr.text));
+    } else {
+      p.textContent = cr.text;
+    }
+    wrap.appendChild(p);
+  }
+
   // Long game names: shrink the title a touch until it fits on one line.
   function fitTitle(){
     var t = document.querySelector('.game-title');
