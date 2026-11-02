@@ -524,6 +524,27 @@ footer.foot{
 .xw-toolbar{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
 .xw-toolbar .pill-btn{ padding:9px 16px; font-size:12.5px; }
 
+/* Option tabs above the board (only shown when the crossword has more than one puzzle) */
+.xw-tabs{ display:flex; gap:6px; justify-content:center; margin:2px auto 8px; }
+.xw-tabs[hidden]{ display:none; }
+.xw-tab{
+  font-family:var(--font-heading);
+  font-weight:600;
+  font-size:12px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  min-height:32px;
+  padding:6px 18px;
+  border-radius:999px;
+  border:1px solid var(--rule);
+  background:transparent;
+  color:var(--ink-soft);
+  cursor:pointer;
+  transition:background .15s ease, color .15s ease, border-color .15s ease;
+}
+.xw-tab:hover{ border-color:var(--rose); color:var(--ink); }
+.xw-tab.active{ background:var(--rose); border-color:var(--rose); color:var(--on-accent); }
+
 @media (max-width:480px){
   .xw-board{ width:min(100%, 300px); margin:4px auto 12px; }
   .xw-cluebar{ padding:8px 4px; margin-bottom:12px; min-height:46px; }
@@ -537,7 +558,7 @@ footer.foot{
    Deliberately distinct from .pill-btn so it can't be mistaken for the
    on-screen Enter key: outlined, accent-toned, on its own row. */
 .restart-row{
-  display:flex; justify-content:center;
+  display:flex; justify-content:center; flex-wrap:wrap; gap:10px;
   margin-top:26px;
   padding-top:20px;
   border-top:1px solid var(--rule);
@@ -558,12 +579,15 @@ footer.foot{
 }
 .restart-btn:hover{ background:var(--rose); color:var(--on-accent); }
 .restart-btn:active{ transform:scale(0.97); }
+.restart-btn.solid{ background:var(--rose); color:var(--on-accent); }   /* "See results" - the main action once a game is over */
+.restart-btn.solid:hover{ filter:brightness(1.1); }
 
 /* ---------- win modal ---------- */
 .modal-overlay{
   position:fixed; inset:0;
   background:var(--overlay);
-  display:flex; align-items:center; justify-content:center;
+  display:flex; align-items:flex-start; justify-content:center;   /* the card centres itself with margin:auto, so a tall card scrolls instead of being clipped */
+  overflow-y:auto;
   z-index:60;
   opacity:0; pointer-events:none;
   visibility:hidden;                 /* hidden buttons must not keep keyboard focus */
@@ -575,16 +599,21 @@ footer.foot{
 .win-modal{
   background:var(--paper);
   border-radius:18px;
-  padding:34px 30px 28px;
-  max-width:360px;
+  padding:var(--modal-pt,34px) var(--modal-px,30px) 28px;
   width:100%;
   text-align:center;
   box-shadow:0 20px 60px rgba(0,0,0,0.35);
-  transform:scale(0.85) translateY(10px);
-  transition:transform .3s cubic-bezier(.34,1.56,.64,1);
   position:relative;
 }
-.modal-overlay.show .win-modal{ transform:scale(1) translateY(0); }
+/* wraps the card + its close button: the card may scroll on a short phone, the ✕ must not */
+.win-wrap{
+  position:relative;
+  width:100%; max-width:360px;
+  margin:auto;
+  transform:scale(0.85) translateY(10px);
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1);
+}
+.modal-overlay.show .win-wrap{ transform:scale(1) translateY(0); }
 
 .win-seal{
   width:64px; height:64px;
@@ -597,6 +626,34 @@ footer.foot{
 .win-seal.hidden{ display:none; }
 .win-modal h2{ font-family:var(--font-heading); font-style:italic; font-weight:600; font-size:26px; margin:0 0 6px; }
 .win-modal p{ font-size:13.5px; color:var(--ink-soft); margin:0 0 22px; }
+.win-modal p.tight{ margin-bottom:14px; }
+
+/* the ✕ in the top-right corner of every results pop-up (sits on .win-wrap, so it never scrolls away) */
+.modal-close{
+  position:absolute; top:8px; right:8px; z-index:3;
+  display:flex; align-items:center; justify-content:center;
+  width:40px; height:40px; padding:0;
+  border:none; border-radius:50%;
+  background:transparent; color:var(--ink-soft);
+  cursor:pointer;
+  transition:background .15s ease, color .15s ease, transform .1s ease;
+}
+.modal-close svg{ width:14px; height:14px; display:block; }
+.modal-close:hover{ background:var(--rule); color:var(--ink); }
+.modal-close:active{ transform:scale(0.92); }
+
+/* Wordle: the answer, shown on the results pop-up */
+.win-answer{ margin:0 0 20px; }
+.win-answer .lbl{
+  display:block; margin-bottom:4px;
+  font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-soft);
+}
+.win-answer .word{
+  display:block;
+  font-family:var(--font-heading); font-weight:700;
+  font-size:26px; letter-spacing:0.3em; padding-left:0.3em;   /* padding balances the trailing letter-space so it stays centred */
+  color:var(--rose-deep);
+}
 .win-emoji-grid{ font-size:20px; line-height:1.35; letter-spacing:2px; margin-bottom:20px; user-select:all; white-space:pre-line; }
 .share-line{
   font-family:var(--font-italic);
@@ -712,6 +769,10 @@ button, .conn-cell, .xw-cell{ touch-action:manipulation; -webkit-tap-highlight-c
   .xw-board{
     width:min(100%, 300px, calc(100vh - 405px));
     width:min(100%, 300px, calc(100dvh - 405px));
+  }
+  .xw-wrap.has-tabs .xw-board{
+    width:min(100%, 300px, calc(100vh - 447px));
+    width:min(100%, 300px, calc(100dvh - 447px));
   }
   .key{ height:clamp(34px, 6.2vh, 44px); height:clamp(34px, 6.2dvh, 44px); }
 }

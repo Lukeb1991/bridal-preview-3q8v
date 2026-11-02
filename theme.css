@@ -259,7 +259,7 @@ footer.foot::before{
 .win-modal{
   background:linear-gradient(180deg, #1D1416 0%, #150E10 100%);
   border:1px solid var(--rule);
-  padding-top:50px;
+  --modal-pt:50px;                       /* top padding (room for the lace edge); the close button reads this too */
   overflow-x:hidden;
   overflow-y:auto;                       /* scrolls instead of getting cut off on very short screens */
   max-height:calc(100vh - 40px);
@@ -283,6 +283,24 @@ footer.foot::before{
 .share-line.share-head{ margin-bottom:8px; color:var(--ink); }
 .share-line.share-close{ margin:-6px 0 16px; }
 .restart-btn{ background:transparent; border-color:#8E1B2C; }
+
+/* short phones (e.g. iPhone SE): tighten the card so the share buttons are rarely off-screen */
+@media (max-height:780px){
+  .win-modal{ --modal-pt:40px; --modal-px:22px; padding-bottom:18px; }
+  .win-seal{ width:46px; height:46px; margin-bottom:8px; }
+  .win-seal svg{ width:22px; height:22px; }
+  .win-modal h2{ font-size:19px; }
+  .win-modal p{ font-size:15px; margin-bottom:12px; }
+  .win-modal p.tight{ margin-bottom:6px; }
+  .win-answer{ margin-bottom:10px; }
+  .win-answer .word{ font-size:22px; }
+  .win-emoji-grid{ font-size:17px; line-height:1.22; margin-bottom:10px; }
+  .share-line{ font-size:15px; margin-bottom:8px; }
+  .share-line.share-close{ margin:-4px 0 10px; }
+  .share-row{ gap:7px; }
+  .share-btn{ padding:9px 16px; }
+  .play-again-btn{ margin-top:4px; padding:9px 22px; }
+}
 
 /* ---------- confetti → petals ---------- */
 .confetti span{ border-radius:60% 0 60% 0; opacity:0.5; }

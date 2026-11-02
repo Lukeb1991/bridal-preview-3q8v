@@ -36,6 +36,8 @@
   <div class="keyboard" id="keyboard"></div>
 
   <div class="restart-row">
+    <!-- appears once a game is over, so the results can be reopened after the pop-up is closed -->
+    <button class="restart-btn solid is-hidden" id="resultsBtn">See results</button>
     <button class="restart-btn" id="resetBtn" title="Start over with a new word">
       &#8635; New word
     </button>
@@ -47,6 +49,8 @@
 
 <!-- Win / lose modal -->
 <div class="modal-overlay" id="modalOverlay">
+  <div class="win-wrap">
+    <button class="modal-close" id="closeBtn" aria-label="Close"><svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
   <div class="win-modal">
     <div class="win-seal" id="winSeal">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -55,7 +59,8 @@
       </svg>
     </div>
     <h2 id="winTitle"></h2>
-    <p id="winSub"></p>
+    <p class="tight" id="winSub"></p>
+    <div class="win-answer"><span class="lbl">The word was</span><span class="word" id="winAnswer"></span></div>
     <p class="share-line share-head" id="shareLine"></p>
     <div class="win-emoji-grid" id="winEmojiGrid"></div>
     <p class="share-line share-close" id="shareClose"></p>
@@ -68,6 +73,7 @@
       <button class="share-btn copy" id="shareCopy">Copy message</button>
     </div>
     <button class="play-again-btn" id="playAgainBtn">&#8635; Play again</button>
+  </div>
   </div>
 </div>
 
@@ -343,6 +349,7 @@ function resetGame(newAnswer){
   guessResults = [];
   current = "";
   gameOver = false;
+  resultsBtn.classList.add('is-hidden');
   rows.forEach(cells=>cells.forEach(cell=>{
     cell.textContent = '';
     cell.className = 'wordle-cell';
@@ -381,8 +388,13 @@ function resultLine(){
   return `${CFG.shareTitle} ${score}/${ROWS} ${CFG.shareEmoji}`;
 }
 
+const resultsBtn = document.getElementById('resultsBtn');
+let lastWon = false;
+
 function openWinModal(won){
+  lastWon = won;
   winEmojiGrid.textContent = buildEmojiGrid();
+  document.getElementById('winAnswer').textContent = ANSWER;      // shown whether she won or not
   if(won){
     winSeal.classList.remove('hidden');
     winTitle.textContent = CFG.winTitle;
@@ -394,10 +406,11 @@ function openWinModal(won){
   } else {
     winSeal.classList.add('hidden');
     winTitle.textContent = CFG.loseTitle;
-    winSub.textContent = `The word was ${ANSWER}. Fancy another round?`;
+    winSub.textContent = 'Fancy another round?';
     shareLine.style.display = shareClose.style.display = 'none';
     shareRow.style.display = 'none';
   }
+  resultsBtn.classList.remove('is-hidden');                       // lets her bring this pop-up back after closing it
   modalOverlay.classList.add('show');
 }
 function closeWinModal(){ modalOverlay.classList.remove('show'); }
@@ -405,7 +418,10 @@ document.getElementById('playAgainBtn').addEventListener('click', ()=>{
   closeWinModal();
   resetGame(pickNewWord());
 });
+document.getElementById('closeBtn').addEventListener('click', closeWinModal);
+resultsBtn.addEventListener('click', ()=>{ haptic(6); openWinModal(lastWon); });
 modalOverlay.addEventListener('click', (e)=>{ if(e.target === modalOverlay) closeWinModal(); });
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeWinModal(); });
 
 function shareText(){ return `${resultLine()}\n${buildEmojiGrid()}\n${CFG.shareLine}`; }
 

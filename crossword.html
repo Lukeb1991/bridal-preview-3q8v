@@ -31,6 +31,8 @@
   </div>
   <p class="game-sub" data-cfg="games.mini.sub">It’s all about the Bride</p>
 
+  <div class="xw-tabs" id="xwTabs" role="tablist" aria-label="Crossword options" hidden></div>
+
   <div class="xw-board" id="board"></div>
 
   <div class="xw-cluebar">
@@ -43,6 +45,8 @@
 
   <div class="xw-toolbar">
     <button class="pill-btn ghost" id="checkBtn">Check</button>
+    <!-- takes Check's place once the puzzle is solved, so the result pop-up can be reopened after closing it -->
+    <button class="pill-btn ghost is-hidden" id="resultsBtn">See results</button>
     <button class="pill-btn ghost" id="revealBtn">Reveal</button>
     <button class="pill-btn ghost" id="clearBtn">Clear</button>
   </div>
@@ -53,6 +57,8 @@
 
 <!-- Win modal -->
 <div class="modal-overlay" id="modalOverlay">
+  <div class="win-wrap">
+    <button class="modal-close" id="closeBtn" aria-label="Close"><svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
   <div class="win-modal">
     <div class="win-seal">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -74,6 +80,7 @@
     </div>
     <button class="play-again-btn" id="playAgainBtn">&#8635; Play again</button>
   </div>
+  </div>
 </div>
 
 <script src="config.js"></script>
@@ -81,60 +88,62 @@
 <script src="haptics.js"></script>
 <script src="common.js"></script>
 <script>
-/* Grid, answers and clues come from config.js (GAME_CONFIG.mini).
+/* Puzzles come from config.js (GAME_CONFIG.mini).
+   One puzzle = layout + answers + clues. If mini.options lists several puzzles, a row of tabs
+   appears above the board so they can be tried side by side (each keeps its own progress + timer).
    Numbering is generated automatically from the layout. */
 const CFG = GAME_CONFIG.mini;
-const LAYOUT = CFG.layout;
-const ANSWERS = CFG.answers;
-const CLUES = CFG.clues;
+const OPTIONS = (CFG.options && CFG.options.length) ? CFG.options : [CFG];
+const MULTI = OPTIONS.length > 1;
 
-const R = LAYOUT.length, C = LAYOUT[0].length;
+// ---- the puzzle on screen (rebuilt by loadPuzzle) ----
+let optIdx = 0;
+let LAYOUT, ANSWERS, CLUES, R, C;
+let numberAt, entries, navOrder, solution;
 const isBlock = (r,c) => LAYOUT[r][c] === '#';
 
-// ---- build entries + numbering ----
-const numberAt = {};
-const entries = [];
-let numCounter = 1;
-
-for(let r=0;r<R;r++){
-  for(let c=0;c<C;c++){
-    if(isBlock(r,c)) continue;
-    const startsAcross = (c===0 || isBlock(r,c-1)) && (c+1<C && !isBlock(r,c+1));
-    const startsDown    = (r===0 || isBlock(r-1,c)) && (r+1<R && !isBlock(r+1,c));
-    if(startsAcross || startsDown){
-      numberAt[`${r},${c}`] = numCounter;
-      if(startsAcross){
-        const cells=[]; let cc=c;
-        while(cc<C && !isBlock(r,cc)){ cells.push([r,cc]); cc++; }
-        const key = `${r},${c},A`;
-        entries.push({num:numCounter, dir:'A', r, c, cells, answer:(ANSWERS[key]||'').toUpperCase(), clue:CLUES[key]||''});
+function buildEntries(){
+  numberAt = {}; entries = [];
+  let numCounter = 1;
+  for(let r=0;r<R;r++){
+    for(let c=0;c<C;c++){
+      if(isBlock(r,c)) continue;
+      const startsAcross = (c===0 || isBlock(r,c-1)) && (c+1<C && !isBlock(r,c+1));
+      const startsDown    = (r===0 || isBlock(r-1,c)) && (r+1<R && !isBlock(r+1,c));
+      if(startsAcross || startsDown){
+        numberAt[`${r},${c}`] = numCounter;
+        if(startsAcross){
+          const cells=[]; let cc=c;
+          while(cc<C && !isBlock(r,cc)){ cells.push([r,cc]); cc++; }
+          const key = `${r},${c},A`;
+          entries.push({num:numCounter, dir:'A', r, c, cells, answer:(ANSWERS[key]||'').toUpperCase(), clue:CLUES[key]||''});
+        }
+        if(startsDown){
+          const cells=[]; let rr=r;
+          while(rr<R && !isBlock(rr,c)){ cells.push([rr,c]); rr++; }
+          const key = `${r},${c},D`;
+          entries.push({num:numCounter, dir:'D', r, c, cells, answer:(ANSWERS[key]||'').toUpperCase(), clue:CLUES[key]||''});
+        }
+        numCounter++;
       }
-      if(startsDown){
-        const cells=[]; let rr=r;
-        while(rr<R && !isBlock(rr,c)){ cells.push([rr,c]); rr++; }
-        const key = `${r},${c},D`;
-        entries.push({num:numCounter, dir:'D', r, c, cells, answer:(ANSWERS[key]||'').toUpperCase(), clue:CLUES[key]||''});
-      }
-      numCounter++;
     }
   }
+  // navigation order: by number, across before down
+  navOrder = [...entries].sort((a,b)=> a.num - b.num || (a.dir==='A'?-1:1));
+  // the correct letter for every square (used by Check)
+  solution = {};
+  entries.forEach(e => e.cells.forEach(([r,c], i)=>{ if(e.answer) solution[`${r},${c}`] = e.answer[i]; }));
 }
-// navigation order: by number, across before down
-const navOrder = [...entries].sort((a,b)=> a.num - b.num || (a.dir==='A'?-1:1));
 
-// the correct letter for every square (used by Check)
-const solution = {};
-entries.forEach(e => e.cells.forEach(([r,c], i)=>{ if(e.answer) solution[`${r},${c}`] = e.answer[i]; }));
-
-// ---- state ----
-const letters = {};
-const wrong = {};       // squares Check has crossed out; cleared when the square is edited
-let currentEntry = navOrder[0];
-let currentPos = currentEntry.cells[0];
+// ---- state (for the puzzle on screen) ----
+let letters = {};
+let wrong = {};         // squares Check has crossed out; cleared when the square is edited
+let currentEntry, currentPos;
 let finished = false;   // true once solved or revealed (stops repeat wins)
 let won = false;        // solved by the player (not revealed)
 let revealed = false;
-let gen = 0;            // bumps on Clear so a pending win pop-up can be cancelled
+let gen = 0;            // bumps on Clear / tab switch so a pending win pop-up can be cancelled
+const saved = OPTIONS.map(() => null);   // each tab's progress while you look at another one
 
 // ---- timer: starts with the first letter, stops when solved or revealed ----
 const timerEl = document.getElementById('timer');
@@ -146,7 +155,7 @@ function tick(){
 }
 function startTimer(){
   if(timerStart !== null || finished) return;
-  timerStart = Date.now();
+  timerStart = Date.now() - elapsed * 1000;
   timerEl.classList.add('running');
   tick();
   timerId = setInterval(tick, 250);
@@ -154,6 +163,10 @@ function startTimer(){
 function stopTimer(){
   if(timerId){ clearInterval(timerId); timerId = null; }
   if(timerStart !== null) tick();
+  timerEl.classList.remove('running');
+}
+function pauseTimer(){          // used when switching tabs: stop the clock but keep the time
+  if(timerId){ clearInterval(timerId); timerId = null; }
   timerEl.classList.remove('running');
 }
 function resetTimer(){
@@ -170,31 +183,101 @@ function keyOf(r,c){ return `${r},${c}`; }
 
 // ---- render grid ----
 const boardEl = document.getElementById('board');
-boardEl.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
 const cellEls = {};
-
-for(let r=0;r<R;r++){
-  for(let c=0;c<C;c++){
-    const cell = document.createElement('div');
-    cell.className = 'xw-cell';
-    if(isBlock(r,c)){
-      cell.classList.add('block');
-    } else {
-      const key = keyOf(r,c);
-      if(numberAt[key]){
-        const n = document.createElement('span');
-        n.className = 'xw-num';
-        n.textContent = numberAt[key];
-        cell.appendChild(n);
+function buildBoard(){
+  boardEl.innerHTML = '';
+  Object.keys(cellEls).forEach(k => delete cellEls[k]);
+  boardEl.style.gridTemplateColumns = `repeat(${C}, 1fr)`;
+  boardEl.style.gridTemplateRows = `repeat(${R}, 1fr)`;
+  for(let r=0;r<R;r++){
+    for(let c=0;c<C;c++){
+      const cell = document.createElement('div');
+      cell.className = 'xw-cell';
+      if(isBlock(r,c)){
+        cell.classList.add('block');
+      } else {
+        const key = keyOf(r,c);
+        if(numberAt[key]){
+          const n = document.createElement('span');
+          n.className = 'xw-num';
+          n.textContent = numberAt[key];
+          cell.appendChild(n);
+        }
+        const letterSpan = document.createElement('span');
+        letterSpan.className = 'xw-letter';
+        cell.appendChild(letterSpan);
+        cell.addEventListener('click', ()=> cellClicked(r,c));
+        cellEls[key] = { cell, letterSpan };
       }
-      const letterSpan = document.createElement('span');
-      letterSpan.className = 'xw-letter';
-      cell.appendChild(letterSpan);
-      cell.addEventListener('click', ()=> cellClicked(r,c));
-      cellEls[key] = { cell, letterSpan };
+      boardEl.appendChild(cell);
     }
-    boardEl.appendChild(cell);
   }
+}
+
+// ---- tabs (only when there is more than one puzzle) ----
+const tabsEl = document.getElementById('xwTabs');
+function renderTabs(){
+  if(!MULTI) return;
+  tabsEl.hidden = false;
+  tabsEl.parentElement.classList.add('has-tabs');
+  tabsEl.innerHTML = '';
+  OPTIONS.forEach((o, i)=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'xw-tab' + (i === optIdx ? ' active' : '');
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', i === optIdx ? 'true' : 'false');
+    const solvedHere = (i === optIdx) ? won : !!(saved[i] && saved[i].won);
+    b.textContent = (o.label || ('Option ' + (i+1))) + (solvedHere ? ' \u2713' : '');
+    b.addEventListener('click', ()=>{ if(i !== optIdx){ haptic(6); loadPuzzle(i); } b.blur(); });
+    tabsEl.appendChild(b);
+  });
+}
+
+function saveState(){
+  if(timerStart !== null && !finished) elapsed = Math.floor((Date.now() - timerStart) / 1000);
+  saved[optIdx] = {
+    letters, wrong, finished, won, revealed, elapsed,
+    started: timerStart !== null,
+    entryIdx: navOrder.indexOf(currentEntry),
+    pos: currentPos
+  };
+}
+
+function loadPuzzle(i){
+  gen++;                                         // cancels a win pop-up that hasn't opened yet
+  if(document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+  modalOverlay.classList.remove('show');
+  if(navOrder){ saveState(); pauseTimer(); }     // keep the puzzle we are leaving exactly as it was
+  optIdx = i;
+  const o = OPTIONS[i];
+  LAYOUT = o.layout; ANSWERS = o.answers; CLUES = o.clues;
+  R = LAYOUT.length; C = LAYOUT[0].length;
+  buildEntries();
+  const s = saved[i];
+  letters  = s ? s.letters  : {};
+  wrong    = s ? s.wrong    : {};
+  finished = s ? s.finished : false;
+  won      = s ? s.won      : false;
+  revealed = s ? s.revealed : false;
+  currentEntry = (s && s.entryIdx >= 0) ? navOrder[s.entryIdx] : navOrder[0];
+  currentPos   = s ? s.pos : currentEntry.cells[0];
+  // timer: resume where this puzzle left off
+  timerStart = null; elapsed = s ? s.elapsed : 0;
+  timerEl.classList.remove('running', 'done');
+  timerEl.textContent = fmt(elapsed);
+  if(s && s.started && !finished){
+    timerStart = Date.now() - elapsed * 1000;
+    timerEl.classList.add('running');
+    timerId = setInterval(tick, 250);
+    tick();
+  }
+  if(won) timerEl.classList.add('done');
+  buildBoard();
+  renderTabs();
+  renderToolbar();
+  renderState();
+  renderLetters();
 }
 
 function cellClicked(r,c){
@@ -327,7 +410,17 @@ const winSub = document.getElementById('winSub');
 const shareLine = document.getElementById('shareLine');
 const shareClose = document.getElementById('shareClose');
 document.getElementById('winTitle').textContent = CFG.winTitle;
-modalOverlay.addEventListener('click', (e)=>{ if(e.target === modalOverlay) modalOverlay.classList.remove('show'); });
+const closeModal = () => modalOverlay.classList.remove('show');
+modalOverlay.addEventListener('click', (e)=>{ if(e.target === modalOverlay) closeModal(); });
+document.getElementById('closeBtn').addEventListener('click', closeModal);
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeModal(); });
+
+// Solved puzzle: "See results" replaces "Check" (Check has nothing left to check)
+function renderToolbar(){
+  document.getElementById('checkBtn').classList.toggle('is-hidden', won);
+  document.getElementById('resultsBtn').classList.toggle('is-hidden', !won);
+}
+document.getElementById('resultsBtn').addEventListener('click', ()=>{ haptic(6); openShare(); });
 
 // e.g. "Deema’s Bridal Crossword 1:23 ⏱️"
 function resultLine(){ return `${CFG.shareTitle} ${fmt(elapsed)} ${CFG.shareEmoji}`; }
@@ -376,6 +469,8 @@ function win(){
   finished = true; won = true;
   stopTimer();                               // the clock stops on the last letter
   timerEl.classList.add('done');
+  renderTabs();
+  renderToolbar();
   haptic([15,40,15,40,25]);
   launchConfettiBurst();
   // short pause so the finished grid is seen before the pop-up covers it
@@ -435,16 +530,18 @@ function resetPuzzle(){
   Object.keys(wrong).forEach(k => delete wrong[k]);
   finished = won = revealed = false;
   resetTimer();
+  saved[optIdx] = null;
   currentEntry = navOrder[0];                 // back to the first square
   currentPos = currentEntry.cells[0];
+  renderToolbar();
+  renderTabs();
   renderLetters();
   renderState();
 }
 document.getElementById('clearBtn').addEventListener('click', ()=>{ resetPuzzle(); showToast('Cleared'); });
 document.getElementById('playAgainBtn').addEventListener('click', resetPuzzle);
 
-renderState();
-renderLetters();
+loadPuzzle(0);
 </script>
 </body>
 </html>

@@ -54,6 +54,8 @@
 
 <!-- Win / finish modal -->
 <div class="modal-overlay" id="modalOverlay">
+  <div class="win-wrap">
+    <button class="modal-close" id="closeBtn" aria-label="Close"><svg viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
   <div class="win-modal">
     <div class="win-seal" id="winSeal">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -74,6 +76,7 @@
       <button class="share-btn copy" id="shareCopy">Copy message</button>
     </div>
     <button class="play-again-btn" id="playAgainBtn">&#8635; Play again</button>
+  </div>
   </div>
 </div>
 
@@ -309,7 +312,7 @@ function openModal(won){
   } else {
     winSeal.classList.add('hidden');
     winTitle.textContent = 'So close!';
-    winSub.textContent = "Out of guesses — here's the full list above.";
+    winSub.textContent = 'Out of guesses. Close this to see all the answers.';
     shareLine.style.display = 'none';
     shareRow.style.display = 'none';
   }
@@ -328,7 +331,9 @@ function restart(){
 document.getElementById('playAgainBtn').addEventListener('click', restart);
 document.getElementById('againBtn').addEventListener('click', restart);
 document.getElementById('resultsBtn').addEventListener('click', ()=> openModal(lastWon));
+document.getElementById('closeBtn').addEventListener('click', closeModal);
 modalOverlay.addEventListener('click', (e)=>{ if(e.target === modalOverlay) closeModal(); });
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeModal(); });
 
 function shareText(){ return `${SHARE_LINE}\n\n${buildEmojiGrid()}`; }
 document.getElementById('shareWhatsapp').addEventListener('click', ()=>{
